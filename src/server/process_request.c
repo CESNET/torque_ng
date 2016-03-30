@@ -122,18 +122,18 @@
 #include "../lib/Libutils/u_lock_ctl.h" /* lock_node, unlock_node */
 #include "../lib/Libnet/lib_net.h" /* globalset_del_sock */
 #include "svr_func.h" /* get_svr_attr_* */
-#include "req_getcred.h" /* req_altauthenuer */ 
-#include "req_quejob.h" /* req_quejob, req_jobcredential, req_mvjobfile */ 
-#include "req_holdjob.h" /* req_holdjob, req_checkpointjob */ 
-#include "req_stat.h" /* req_stat_node */ 
-#include "req_jobobit.h" /* req_jobobit */ 
-#include "req_runjob.h" /* req_runjob, req_stagein */ 
-#include "req_deletearray.h" /* req_deletearray */ 
-#include "req_delete.h" /* req_deletejob */ 
-#include "req_movejob.h" /* req_orderjob */ 
-#include "req_modify.h" /* req_modifyjob, req_modifyarray */ 
-#include "req_track.h" /* req_track */ 
-#include "req_rescq.h" /* req_rescreserve, req_rescfree */ 
+#include "req_getcred.h" /* req_altauthenuer */
+#include "req_quejob.h" /* req_quejob, req_jobcredential, req_mvjobfile */
+#include "req_holdjob.h" /* req_holdjob, req_checkpointjob */
+#include "req_stat.h" /* req_stat_node */
+#include "req_jobobit.h" /* req_jobobit */
+#include "req_runjob.h" /* req_runjob, req_stagein */
+#include "req_deletearray.h" /* req_deletearray */
+#include "req_delete.h" /* req_deletejob */
+#include "req_movejob.h" /* req_orderjob */
+#include "req_modify.h" /* req_modifyjob, req_modifyarray */
+#include "req_track.h" /* req_track */
+#include "req_rescq.h" /* req_rescreserve, req_rescfree */
 #include "req_shutdown.h" /* req_shutdown */
 #include "req_signal.h" /* req_signaljob */
 #include "req_message.h" /* req_messagejob */
@@ -187,20 +187,23 @@ extern int       LOGLEVEL;
 static const int munge_on = 1;
 #else
 static const int munge_on = 0;
-#endif 
+#endif
 
 static void freebr_manage(struct rq_manage *);
 static void freebr_cpyfile(struct rq_cpyfile *);
 static void free_rescrq(struct rq_rescq *);
 void        close_quejob(int sfds);
 
-/* END private prototypes */
+#ifdef GSSAPI
+extern int req_gssauthenuser (struct batch_request *preq, struct tcp_chan *chan);
+#endif
 
+/* END private prototypes */
 
 
 #ifdef ENABLE_UNIX_SOCKETS
 int get_creds(
-    
+
   int   sd,
   char *username,
   char *hostname)
@@ -302,7 +305,7 @@ bool request_passes_acl_check(
 
   batch_request *request,
   unsigned long  conn_addr)
-  
+
   {
   long acl_enable = FALSE;
 
@@ -327,7 +330,7 @@ bool request_passes_acl_check(
     if (isanode != NULL)
       unlock_node(isanode, __func__, NULL, LOGLEVEL);
     }
-  
+
   return(true);
   } /* END request_passes_acl_check() */
 
@@ -351,6 +354,8 @@ batch_request *read_request_from_socket(
 #endif
   unsigned long         conn_addr;
   int                   sfds = chan->sock;
+
+  int access_by_krb = 0;
 
   if ((sfds < 0) ||
       (sfds >= PBS_NET_MAX_CONNECTIONS))
@@ -412,7 +417,7 @@ batch_request *read_request_from_socket(
     {
     char out[80];
 
-    snprintf(tmpLine, MAXLINE, "request on invalid type of connection: %d, sock type: %d, from address %s", 
+    snprintf(tmpLine, MAXLINE, "request on invalid type of connection: %d, sock type: %d, from address %s",
                 conn_active,conn_socktype, netaddr_long(conn_addr, out));
     log_event(PBSEVENT_SYSTEM, PBS_EVENTCLASS_REQUEST,
       "process_req", tmpLine);
@@ -458,6 +463,33 @@ batch_request *read_request_from_socket(
   if (conn_socktype & PBS_SOCK_UNIX)
     strcpy(request->rq_host, server_name);
 
+  #ifdef GSSAPI
+    if (svr_conn[sfds].cn_authen == PBS_NET_CONN_GSSAPIAUTH)
+    {
+    if (server.sv_attr[(int)SRV_ATR_acl_krb_realm_enable].at_val.at_long)
+      {
+      if (acl_check(&server.sv_attr[(int)SRV_ATR_acl_krb_realms],
+                    svr_conn[sfds].principal,ACL_Host) == 0)
+        {
+        char tmpLine[1024];
+        snprintf(tmpLine, sizeof(tmpLine), "you can't access this server with principal \"%s\"",
+                 svr_conn[sfds].principal);
+
+        req_reject(PBSE_BADHOST, 0, request, NULL, tmpLine);
+
+        return NULL;
+        }
+      else
+        access_by_krb = 1;
+      }
+    else
+      { /* no checking done, having a ticket is enough */
+      access_by_krb = 1;
+      }
+    }
+#endif
+
+  if (!access_by_krb) /* if not authentized using kerberos, check host ACL */
   if (request_passes_acl_check(request, conn_addr) == false)
     {
     /* See if the request is in the limited acl list */
@@ -581,6 +613,31 @@ int process_request(
       pthread_mutex_unlock(svr_conn[sfds].cn_mutex);
       }
 
+#ifdef GSSAPI
+  if (request->rq_type == PBS_BATCH_GSSAuthenUser)
+    {
+    /* gss_gssauthenuser will already have called req_reject */
+    if (req_gssauthenuser(request,chan) < 0)
+      {
+      log_event(PBSEVENT_DEBUG, PBS_EVENTCLASS_SERVER,"req_gssauthenuser returned < 0","");
+      return PBSE_GSSAUTH;
+      }
+    log_event(PBSEVENT_DEBUG, PBS_EVENTCLASS_SERVER,"req_gssauthenuser returned >= 0","");
+    conn_authen = PBS_NET_CONN_AUTHENTICATED;
+    }
+  else
+    {
+    if (svr_conn[sfds].cn_authen == PBS_NET_CONN_GSSAPIAUTH)
+      {
+      strcpy(request->rq_user,conn_credent[sfds].username);
+      strcpy(request->rq_host,conn_credent[sfds].hostname);
+      conn_authen = PBS_NET_CONN_AUTHENTICATED;
+      }
+    }
+
+#endif /* GSSAPI */
+
+
     if (ENABLE_TRUSTED_AUTH == TRUE )
       rc = PBSE_NONE;  /* bypass the authentication of the user--trust the client completely */
 #ifdef MUNGE_AUTH
@@ -618,7 +675,7 @@ int process_request(
      * alters and releases on checkpointable jobs.  Allow manager permission
      * for root on the jobs execution node.
      */
-     
+
     if (((request->rq_type == PBS_BATCH_ModifyJob) ||
         (request->rq_type == PBS_BATCH_ReleaseJob)) &&
         (strcmp(request->rq_user, PBS_DEFAULT_ADMIN) == 0))
@@ -635,7 +692,7 @@ int process_request(
         {
         *dptr = '\0';
         }
-      
+
       if ((pjob = svr_find_job(request->rq_ind.rq_modify.rq_objname, FALSE)) != NULL)
         {
         mutex_mgr pjob_mutex = mutex_mgr(pjob->ji_mutex, true);
@@ -654,7 +711,7 @@ int process_request(
           }
           pjob_mutex.unlock();
         }
-      
+
       if (!skip)
         {
         request->rq_perm = svr_get_privilege(request->rq_user, request->rq_host);
@@ -738,7 +795,7 @@ int dispatch_request(
 
       net_add_close_func(sfds, close_quejob);
       rc = req_quejob(request);
-      
+
       break;
 
 
@@ -748,23 +805,23 @@ int dispatch_request(
 
 
     case PBS_BATCH_jobscript:
-     
+
       rc = req_jobscript(request);
-      
+
       break;
 
 
     case PBS_BATCH_RdytoCommit:
-     
+
       rc = req_rdytocommit(request);
-      
+
       break;
 
 
     case PBS_BATCH_Commit:
-      
+
       rc = req_commit(request);
-      
+
       break;
 
 
@@ -895,7 +952,7 @@ int dispatch_request(
 
       if (!strncasecmp(request->rq_ind.rq_status.rq_id, "truncated", strlen("truncated")))
         rc =req_stat_job(request);
-      else 
+      else
         rc = req_selectjobs(request);
 
       break;
@@ -933,7 +990,7 @@ int dispatch_request(
       break;
 
     case PBS_BATCH_StatusNode:
-      
+
       rc = req_stat_node(request);
 
       break;
@@ -968,7 +1025,7 @@ int dispatch_request(
     case PBS_BATCH_AuthenUser:
 
       /* determine if user is valid */
-      rc = req_authenuser( request); 
+      rc = req_authenuser( request);
 
       break;
 
@@ -991,8 +1048,14 @@ int dispatch_request(
     case PBS_BATCH_StatusJob:
 
       rc = req_stat_job(request);
-      
+
       break;
+
+#ifdef GSSAPI
+    case PBS_BATCH_GSSAuthenUser:
+      /* already handled */
+      break;
+#endif /* GSSAPI */
 
     default:
 
@@ -1082,7 +1145,7 @@ void close_quejob(
           pjob->ji_qs.ji_substate = JOB_SUBSTATE_QUEUED;
 
           int rc = svr_enquejob(pjob, FALSE, NULL, false, false);
-          
+
           if ((rc == PBSE_JOBNOTFOUND) ||
               (rc == PBSE_JOB_RECYCLED))
             {
@@ -1099,7 +1162,7 @@ void close_quejob(
         {
         // Delete the job
         svr_job_purge(pjob);
-       
+
         pjob_mutex.set_unlock_on_exit(false);
         }
 
@@ -1134,7 +1197,7 @@ void free_br(
 
   reply_free(&preq->rq_reply);
 
-  if (preq->rq_extend) 
+  if (preq->rq_extend)
     {
     free(preq->rq_extend);
     preq->rq_extend = NULL;

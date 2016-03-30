@@ -817,7 +817,7 @@ attribute_def svr_attr_def[] =
       MGR_ONLY_SET,
       ATR_TYPE_LONG,
       PARENT_TYPE_SERVER
-  }, 
+  },
 
   /* SRV_ATR_LogFileMaxSize */
   {   (char *)ATTR_logfilemaxsize,      /* "log_file_max_size" */
@@ -1001,7 +1001,7 @@ attribute_def svr_attr_def[] =
       ATR_TYPE_LONG,
       PARENT_TYPE_SERVER
   },
-	
+
   /* SRV_ATR_JobMustReport */
   { (char *)ATTR_jobmustreport,      /* "job_must_report" */
     	decode_b,
@@ -1258,6 +1258,47 @@ attribute_def svr_attr_def[] =
    MGR_ONLY_SET,
    ATR_TYPE_ACL,
    PARENT_TYPE_SERVER},
+#endif
+#ifdef GSSAPI
+  /* SVR_ATR_krb_realm_submit_acl */
+  {   ATTR_krb_realm_submit_acl, /* "krb_realm_submit_acl" */
+      decode_arst,
+      encode_arst,
+      set_hostacl,
+      comp_arst,
+      free_arst,
+      NULL_FUNC,
+      MGR_ONLY_SET,
+      ATR_TYPE_ACL,
+      PARENT_TYPE_SERVER,
+  },
+
+
+  /* SVR_ATR_acl_krb_realm_enable */
+  { ATTR_acl_krb_realm_enable,  /* "acl_krb_realm_enable" */
+    decode_b,
+    encode_b,
+    set_b,
+    comp_b,
+    free_null,
+    NULL_FUNC,
+    MGR_ONLY_SET,
+    ATR_TYPE_LONG,
+    PARENT_TYPE_SERVER
+  },
+
+  /* SRV_ATR_acl_krb_realms */
+  { ATTR_acl_krb_realms,  /* "acl_krb_realms" */
+    decode_arst,
+    encode_arst,
+    set_hostacl,
+    comp_arst,
+    free_arst,
+    NULL_FUNC,
+    MGR_ONLY_SET,
+    ATR_TYPE_ACL,
+    PARENT_TYPE_SERVER
+  },
 #endif
 
   /* SRV_ATR_minthreads */
@@ -1548,7 +1589,7 @@ attribute_def svr_attr_def[] =
     PARENT_TYPE_SERVER
   },
 
-  // SRV_ATR_LegacyVmem 
+  // SRV_ATR_LegacyVmem
   {(char *)ATTR_legacy_vmem, // "legacy_vmem"
    decode_b,
    encode_b,

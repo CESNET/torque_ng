@@ -427,6 +427,9 @@ enum job_atr
   JOB_ATR_login_node_key,
   JOB_ATR_request_version,
   JOB_ATR_req_information,
+#ifdef GSSAPI
+  JOB_ATR_krb_princ,
+#endif
 #include "site_job_attr_enum.h"
 
   JOB_ATR_copystd_on_rerun, /* copy std files to user's specified on reurn */

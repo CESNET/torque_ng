@@ -92,6 +92,10 @@
 #define FALSE 0
 #endif
 
+#ifdef GSSAPI
+#include "pbsgss.h"
+#endif
+
 /*
  * Integer function return values from Data-is-Strings reading calls
  */
@@ -256,13 +260,16 @@ void disiui_();
 extern const char *dis_emsg[];
 
 /* the following routines set/control DIS over tcp */
-
+extern "C" {
 extern struct tcp_chan * DIS_tcp_setup (int fd);
 extern int  DIS_tcp_wflush (struct tcp_chan *chan);
 extern void DIS_tcp_settimeout (long timeout);
 extern void DIS_tcp_cleanup(struct tcp_chan *chan);
 extern void DIS_tcp_close(struct tcp_chan *chan);
-
+#ifdef GSSAPI
+extern int DIS_tcp_set_gss(struct tcp_chan *chan, gss_ctx_id_t ctx, OM_uint32 flags);
+#endif
+  }
 
 /* NOTE:  increase THE_BUF_SIZE to 131072 for systems > 5k nodes */
 

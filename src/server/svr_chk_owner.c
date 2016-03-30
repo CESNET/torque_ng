@@ -102,6 +102,10 @@
 #include "../lib/Libnet/lib_net.h"
 #include "ji_mutex.h"
 
+#ifdef GSSAPI
+#include "pbsgss.h"
+#endif
+
 /* Global Data */
 
 extern int    LOGLEVEL;
@@ -261,7 +265,12 @@ int svr_get_privilege(
   int        is_root = 0;
   int        priv = (ATR_DFLAG_USRD | ATR_DFLAG_USWR);
   int        num_host_chars;
-  char       uh[PBS_MAXUSER + PBS_MAXHOSTNAME + 2];
+#ifdef GSSAPI
+#define uhlen PBS_MAXUSER + PBS_MAXHOSTNAME + 102
+#else
+#define uhlen PBS_MAXUSER + PBS_MAXHOSTNAME + 2
+#endif
+  char       uh[uhlen];
   char       host_no_port[PBS_MAXHOSTNAME+1];
   char      *colon_loc = NULL;
   char       log_buf[LOCAL_LOG_BUF_SIZE];
@@ -289,7 +298,7 @@ int svr_get_privilege(
     sprintf(log_buf, "Invalid user: %s", user);
 
     log_record(PBSEVENT_SECURITY, PBS_EVENTCLASS_SERVER, __func__, log_buf);
-     
+
     return(0);
     }
 
@@ -300,7 +309,7 @@ int svr_get_privilege(
 
   /* if the request host has port information in it, we want to strip it out */
 
-  if (colon_loc == NULL) 
+  if (colon_loc == NULL)
     {
     /* no colon found */
     num_host_chars = strlen(host);
@@ -327,13 +336,31 @@ int svr_get_privilege(
     return(0);
     }
 
-  sprintf(uh, "%s@%s", user, host);
+  snprintf(uh,uhlen,"%s@%s",user,host);
+
+#ifdef GSSAPI
+  static const char *rootprinc = NULL;
+
+  if (rootprinc == NULL)
+    rootprinc = pbsgss_get_host_princname();
+
+  if (rootprinc == NULL)
+    return 0;
+
+  if (strcmp(uh,rootprinc) == 0)
+    {
+    is_root = 1;
+#ifdef PBS_ROOT_ALWAYS_ADMIN
+    return(priv|ATR_DFLAG_MGRD|ATR_DFLAG_MGWR|ATR_DFLAG_OPRD|ATR_DFLAG_OPWR);
+#endif  /* PBS_ROOT_ALWAYS_ADMIN */
+    }
+#endif /* GSSAPI */
 
   server_addr = get_hostaddr(&my_err, server_host);
   connect_addr = get_hostaddr(&my_err, host_no_port);
 
 #ifdef __CYGWIN__
-  if ((IamAdminByName(user)) && 
+  if ((IamAdminByName(user)) &&
       (server_addr == connect_addr))
     {
     return(priv | ATR_DFLAG_MGRD | ATR_DFLAG_MGWR | ATR_DFLAG_OPRD | ATR_DFLAG_OPWR);
@@ -343,7 +370,7 @@ int svr_get_privilege(
   local_server_addr = get_hostaddr(&my_err, server_localhost);
 
   if ((strcmp(user, PBS_DEFAULT_ADMIN) == 0) &&
-      ((connect_addr == server_addr) || 
+      ((connect_addr == server_addr) ||
        (connect_addr == local_server_addr)))
     {
     is_root = 1;
@@ -388,7 +415,7 @@ int svr_get_privilege(
 
   /* resolve using the other hostname (if available) and give the higher privilege */
   other_host = get_cached_fullhostname(host, NULL);
-  
+
   if ((other_host != NULL) &&
       (strcmp(host, other_host)))
     other_priv = svr_get_privilege(user, other_host);
@@ -424,7 +451,7 @@ int authenticate_user(
   long   acl_enabled = FALSE;
 
 #ifdef MUNGE_AUTH
- 
+
   if (strncmp(preq->rq_user, pcred->username, PBS_MAXUSER))
     {
     /* extra check for munge */
@@ -432,8 +459,8 @@ int authenticate_user(
     char uh[PBS_MAXUSER + PBS_MAXHOSTNAME + 2];
 
     sprintf(uh, "%s@%s", preq->rq_user, pcred->hostname);
-    
-    get_svr_attr_arst(SRV_ATR_authusers, &my_acl); 
+
+    get_svr_attr_arst(SRV_ATR_authusers, &my_acl);
     if ((acl_check_my_array_string(my_acl, uh, ACL_User_Host)) == 0)
       {
       *autherr = strdup("User not in authorized user list.");
@@ -481,11 +508,11 @@ int authenticate_user(
         (memcmp(sai1, sai2, sizeof(struct sockaddr_in))))
       {
       *autherr = strdup("Hosts do not match");
-      
+
       sprintf(error_msg, "%s: Requested host %s: credential host: %s",
         *autherr, preq->rq_host, pcred->hostname);
       log_event(PBSEVENT_ADMIN, PBS_EVENTCLASS_SERVER, __func__, error_msg);
-    
+
       return(PBSE_BADCRED);
       }
     }
@@ -497,7 +524,7 @@ int authenticate_user(
       {
       /* use configured value if set */
       }
-    else 
+    else
       {
       /* if not use the default */
       lifetime = CREDENTIAL_LIFETIME;
@@ -521,7 +548,7 @@ int authenticate_user(
     {
     struct array_strings *acl_users = NULL;
     snprintf(uath, sizeof(uath), "%s@%s", preq->rq_user, preq->rq_host);
-    
+
     get_svr_attr_arst(SRV_ATR_AclUsers, &acl_users);
     if (acl_check_my_array_string(acl_users, uath, ACL_User) == 0)
       {
@@ -531,7 +558,7 @@ int authenticate_user(
 
 #ifdef __CYGWIN__
 
-      if ((!IamAdminByName(preq->rq_user)) || 
+      if ((!IamAdminByName(preq->rq_user)) ||
           (connect_addr != server_addr))
         {
         return(PBSE_PERM);
@@ -614,7 +641,7 @@ void chk_job_req_permissions(
 
         log_event(PBSEVENT_DEBUG,PBS_EVENTCLASS_JOB,pjob->ji_qs.ji_jobid,log_buf);
 
-        snprintf(tmpLine, sizeof(tmpLine), 
+        snprintf(tmpLine, sizeof(tmpLine),
           "invalid state for job - %s",
           PJobState[pjob->ji_qs.ji_state]);
 

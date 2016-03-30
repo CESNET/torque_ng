@@ -133,10 +133,15 @@
 #include "req_runjob.h"
 #include "mutex_mgr.hpp"
 #include "id_map.hpp"
+#include "process_request.h"
+#include "pbs_job.h"
 
+#ifdef GSSAPI
+#include "pbsgss.h"
+#endif
 
 /* External Functions Called: */
-
+extern struct connection svr_conn[];
 extern int   reply_jid(char *);
 extern int   svr_authorize_jobreq(struct batch_request *, job *);
 extern int   svr_chkque(job *, pbs_queue *, char *, int, char *);
@@ -194,19 +199,19 @@ static int user_account_read_user(char *);
 
 static const char *pbs_o_que = "PBS_O_QUEUE=";
 
-/****************************************************************** 
+/******************************************************************
  * set_nodes_attr - Check to see is the node resource was requested
  *                 on the qsub line. If not add the node attribute
  *                 to the Resource_List and set the value to 1. This
  *                 makes it so that if  procct is set on a queue
  *                 jobs without a node resource request will still
  *                 be properly routed.
- * Returns: 0 if OK 
- *          Non-Zero on failure 
+ * Returns: 0 if OK
+ *          Non-Zero on failure
  *****************************************************************/
 
 int set_nodes_attr(
-    
+
   job *pjob)
 
   {
@@ -228,8 +233,8 @@ int set_nodes_attr(
           pres = (resource *)GET_NEXT(pres->rs_link);
           continue;
           }
-        
-        if ((strncmp(pname, "nodes", 5) == 0) || 
+
+        if ((strncmp(pname, "nodes", 5) == 0) ||
             (strncmp(pname, "procs", 5) == 0))
           {
           nodect_set = 1;
@@ -238,7 +243,7 @@ int set_nodes_attr(
         }
         pres = (resource *)GET_NEXT(pres->rs_link);
       }
-    }                                                                         
+    }
 
     if (nodect_set == 0)
       {
@@ -281,12 +286,12 @@ void sum_select_mem_request(
     return;
 
   current = strstr(pj->ji_wattr[JOB_ATR_submit_args].at_val.at_str,select);
-  
+
   if (current != NULL)
     {
     /* comma delimits different options for -W */
     end = strchr(current,',');
-    
+
     /* make current the last character if no comma */
     if (end == NULL)
       end = current + strlen(current);
@@ -297,14 +302,14 @@ void sum_select_mem_request(
     clause_end = strchr(current,'+');
 
     current = strstr(current,mem_str);
-    
+
     /* find each mem request */
     while ((current != NULL) &&
            (current <  end - mem_str_len))
       {
       unsigned long tmp;
-     
-      /* make sure we have the right number of "tasks" for this mem 
+
+      /* make sure we have the right number of "tasks" for this mem
        * request */
       if (clause_end != NULL)
         {
@@ -320,9 +325,9 @@ void sum_select_mem_request(
         }
 
       current += mem_str_len;
-      
+
       tmp = atoi(current);
-      
+
       /* advance past the digits to the units */
       while ((current != '\0') &&
              (isdigit(*current)))
@@ -332,53 +337,53 @@ void sum_select_mem_request(
         {
         /* no units, assume kb */
         mem_total += tmp;
-        
+
         break;
         }
-      
+
       /* if not kb, convert */
       switch (*current)
         {
         case 'k':
         case 'K':
-          
+
           /* do nothing, we're converting to kb */
-          
+
           break;
-          
+
         case 'm':
         case 'M':
-          
+
           tmp = tmp << 10;
-          
+
           break;
-          
+
         case 'g':
         case 'G':
-          
+
           tmp = tmp << 20;
-          
+
           break;
-          
+
         case 't':
         case 'T':
-          
+
           tmp = tmp << 30;
-          
+
           break;
-          
+
         default:
-          
+
           snprintf(log_buf,sizeof(log_buf),
             "WARNING:   Unknown unit %cb used in memory request\n",
             *current);
           log_err(-1, __func__, log_buf);
-          
+
           break;
         }
 
       mem_total += tmp * multiplier;
-      
+
       current = strstr(current,mem_str);
       }
     }
@@ -455,7 +460,7 @@ int get_job_id(
   else
     {
     /* Create a job id */
-    char  host_server[PBS_MAXSERVERNAME + 1]; 
+    char  host_server[PBS_MAXSERVERNAME + 1];
     long  server_suffix = TRUE;
 
     created_here = JOB_SVFLG_HERE;
@@ -556,7 +561,7 @@ bool job_exists(
 
 
 pbs_queue *get_queue_for_job(
-    
+
   char *queue_name,
   int  &rc)
 
@@ -697,7 +702,7 @@ job *create_and_initialize_job_structure(
 
 
 int decode_attributes_into_job(
-    
+
   job           *pj,
   int            resc_access_perm,
   batch_request *preq,
@@ -711,7 +716,7 @@ int decode_attributes_into_job(
   int          rc = PBSE_NONE;
   // default is pass the cpu
   long         passCpu = 1;
-  
+
   get_svr_attr_l(SRV_ATR_pass_cpu_clock,&passCpu);
 
   psatl = (svrattrl *)GET_NEXT(preq->rq_ind.rq_queuejob.rq_attr);
@@ -767,7 +772,7 @@ int decode_attributes_into_job(
     /* special gpu case
      * if both ncpus and gpus specified, add resource for gpus
      */
-    
+
     if ((strcmp(psatl->al_name,ATTR_l) == 0) &&
         (strcmp(psatl->al_resc,"ncpus") == 0) &&
         ((pc = strstr(psatl->al_value,":gpus=")) != NULL))
@@ -868,7 +873,7 @@ int perform_attribute_post_actions(
     {
     pdef = &job_attr_def[i];
 
-    if ((pj->ji_wattr[i].at_flags & ATR_VFLAG_SET) && 
+    if ((pj->ji_wattr[i].at_flags & ATR_VFLAG_SET) &&
         (pdef->at_action))
       {
       rc = pdef->at_action(&pj->ji_wattr[i], pj, ATR_ACTION_NEW);
@@ -918,8 +923,8 @@ int use_proxy_name_if_needed(
       {
       /* not unique, reject job */
       svr_job_purge(pj);
-     
-      rc = PBSE_JOBEXIST; 
+
+      rc = PBSE_JOBEXIST;
       snprintf(log_buf,sizeof(log_buf),
         "Job with id %s already exists, cannot set job id\n",
         tmp_job_id);
@@ -1101,7 +1106,7 @@ int check_attribute_settings(
       {
       std::string ds = "";
       pj->ji_wattr[JOB_ATR_outpath].at_val.at_str[strlen(pj->ji_wattr[JOB_ATR_outpath].at_val.at_str) - 1] = '\0';
-      
+
       replace_attr_string(
         &pj->ji_wattr[JOB_ATR_outpath],
         (strdup(add_std_filename(pj, pj->ji_wattr[JOB_ATR_outpath].at_val.at_str, (int)'o', ds))));
@@ -1118,7 +1123,7 @@ int check_attribute_settings(
         ptr++;
         rc = stat(ptr, &stat_buf);
         }
-      else 
+      else
         {
         rc = stat(pj->ji_wattr[JOB_ATR_outpath].at_val.at_str, &stat_buf);
         }
@@ -1155,7 +1160,7 @@ int check_attribute_settings(
       {
       std::string ds = "";
       pj->ji_wattr[JOB_ATR_errpath].at_val.at_str[strlen(pj->ji_wattr[JOB_ATR_errpath].at_val.at_str) - 1] = '\0';
-      
+
       replace_attr_string(&pj->ji_wattr[JOB_ATR_errpath],
         (strdup(add_std_filename(pj, pj->ji_wattr[JOB_ATR_errpath].at_val.at_str, (int)'e', ds))));
       }
@@ -1171,7 +1176,7 @@ int check_attribute_settings(
         ptr++;
         rc = stat(ptr, &stat_buf);
         }
-      else 
+      else
         {
         rc = stat(pj->ji_wattr[JOB_ATR_errpath].at_val.at_str, &stat_buf);
         }
@@ -1235,7 +1240,7 @@ int check_attribute_settings(
           &pque->qu_attr[QE_ATR_checkpoint_dir],
           SET);
         }
-      else 
+      else
         {
         pthread_mutex_lock(server.sv_attr_mutex);
         if ((server.sv_attr[SRV_ATR_checkpoint_dir].at_flags & ATR_VFLAG_SET) &&
@@ -1331,7 +1336,7 @@ int check_attribute_settings(
     server_name,
     resc_access_perm);
 
-  // Set the request version 
+  // Set the request version
   pj->ji_wattr[JOB_ATR_request_version].at_flags |= ATR_VFLAG_SET;
   if (pj->ji_wattr[JOB_ATR_req_information].at_val.at_ptr != NULL)
     pj->ji_wattr[JOB_ATR_request_version].at_val.at_long = REQ_VERSION_2;
@@ -1368,7 +1373,7 @@ int req_quejob(
   pbs_queue            *pque;
   std::string           jobid;
   std::string           filename;
-  
+
 
   if ((rc = get_job_id(preq, resc_access_perm, created_here, jobid)) != PBSE_NONE)
     return(rc);
@@ -1437,6 +1442,30 @@ int req_quejob(
 
   sum_select_mem_request(pj);
 
+#ifdef GSSAPI
+  /* save gssapi/krb5 creds for this job */
+  if (svr_conn[preq->rq_conn].cn_authen == PBS_NET_CONN_GSSAPIAUTH)
+    {
+    sprintf(log_buffer,"saving creds.  conn is %d, princ %s", preq->rq_conn, svr_conn[preq->rq_conn].principal);
+    log_event(PBSEVENT_DEBUG, PBS_EVENTCLASS_SERVER, "req_quejob", log_buffer);
+
+    (void)job_attr_def[(int)JOB_ATR_krb_princ].at_decode(
+      &pj->ji_wattr[(int)JOB_ATR_krb_princ],
+      NULL, NULL, svr_conn[preq->rq_conn].principal,ATR_DFLAG_ACCESS);
+
+   if (server.sv_attr[SRV_ATR_krb_realm_submit_acl].at_flags & ATR_VFLAG_SET)
+     {
+     if (!acl_check(&server.sv_attr[SRV_ATR_krb_realm_submit_acl],svr_conn[preq->rq_conn].principal,ACL_Host))
+       {
+       svr_job_purge(pj);
+       req_reject(PBSE_GSSACL, 0, preq, NULL, NULL);
+       job_mutex.set_unlock_on_exit(false);
+       return(PBSE_GSSACL);
+       }
+     }
+    }
+#endif /* GSSAPI */
+
   rc = check_attribute_settings(pj, preq, resc_access_perm, pque, que_mgr, cpuClock);
   if (rc != PBSE_NONE)
     {
@@ -1459,7 +1488,7 @@ int req_quejob(
     job_mutex.set_unlock_on_exit(false);
 
     req_reject(PBSE_MAXQUED, 0, preq, NULL, log_buf);
-    
+
     return(PBSE_MAXQUED);
     }
 
@@ -1475,11 +1504,11 @@ int req_quejob(
     {
     char  *oldid;
     char  *hostname;
-    
+
     pj->ji_is_array_template = TRUE;
-    
+
     /* rewrite jobid to include empty brackets
-       this causes arrays to show up as id[].host in qstat output, and 
+       this causes arrays to show up as id[].host in qstat output, and
        actions applied to id[] are applied to the entire array */
     oldid = strdup(pj->ji_qs.ji_jobid);
 
@@ -1488,7 +1517,7 @@ int req_quejob(
     if (hostname != NULL)
       {
       *(hostname++) = '\0';
-      
+
       snprintf(pj->ji_qs.ji_jobid, PBS_MAXSVRJOBID, "%s[].%s",
         oldid,
         hostname);
@@ -1496,7 +1525,7 @@ int req_quejob(
     else
       snprintf(pj->ji_qs.ji_jobid, sizeof(pj->ji_qs.ji_jobid), "%s[]", oldid);
 
-    free(oldid);    
+    free(oldid);
     }
 
   que_mgr.lock();
@@ -1556,7 +1585,7 @@ int req_quejob(
         log_ext(-1, __func__, log_buf, LOG_WARNING);
         }
       }
-    
+
     svr_job_purge(pj);
     job_mutex.set_unlock_on_exit(false);
     return(rc);
@@ -1777,7 +1806,7 @@ int req_mvjobfile(
   if (pj == NULL)
     pj = svr_find_job(preq->rq_ind.rq_jobfile.rq_jobid, FALSE);
 
-  if ((preq->rq_fromsvr == 0) || 
+  if ((preq->rq_fromsvr == 0) ||
       (pj == NULL))
     {
     rc = PBSE_IVALREQ;
@@ -1953,9 +1982,9 @@ int req_rdytocommit(
   pj->ji_wattr[JOB_ATR_state].at_val.at_char = 'T';
   pj->ji_wattr[JOB_ATR_state].at_flags |= ATR_VFLAG_SET;
 
-  /* if this is a job array template then we'll delete the .JB file that 
-     was created for this job since we are going to save it with a different 
-     suffix here. 
+  /* if this is a job array template then we'll delete the .JB file that
+     was created for this job since we are going to save it with a different
+     suffix here.
      XXX: not sure why the .JB file already exists before we do the SAVEJOB_NEW
      save below
    */
@@ -2019,7 +2048,7 @@ int set_interactive_job_roaming_policy(
   char           *dot;
   char            log_buf[LOCAL_LOG_BUF_SIZE];
   int             rc = PBSE_NONE;
-  
+
   get_svr_attr_l(SRV_ATR_InteractiveJobsCanRoam, &interactive_roaming);
   get_svr_attr_l(SRV_ATR_CrayEnabled, &cray_enabled);
 
@@ -2038,12 +2067,12 @@ int set_interactive_job_roaming_policy(
             pnode = find_nodebyname(submit_node_id);
             }
           }
-        
+
         if (pnode != NULL)
           {
           pjob->ji_wattr[JOB_ATR_login_prop].at_flags |= ATR_VFLAG_SET;
           pjob->ji_wattr[JOB_ATR_login_prop].at_val.at_str = strdup(pnode->nd_name);
-          
+
           unlock_node(pnode, __func__, NULL, LOGLEVEL);
           }
         else
@@ -2059,7 +2088,7 @@ int set_interactive_job_roaming_policy(
         }
       }
     }
-  
+
   return(rc);
   } /* END set_interactive_job_roaming_policy() */
 
@@ -2126,7 +2155,7 @@ int req_commit(
   if (LOGLEVEL >= 10)
     LOG_EVENT(PBSEVENT_JOB, PBS_EVENTCLASS_JOB, __func__, pj->ji_qs.ji_jobid);
 
-  mutex_mgr job_mutex = mutex_mgr(pj->ji_mutex, true); 
+  mutex_mgr job_mutex = mutex_mgr(pj->ji_mutex, true);
 #ifdef QUICKCOMMIT
   if (pj->ji_qs.ji_substate != JOB_SUBSTATE_TRANSIN)
     {
@@ -2156,7 +2185,7 @@ int req_commit(
     std::string adjusted_path_jobs;
 
     pj->ji_is_array_template = TRUE;
-    
+
     // get adjusted path_jobs path
     adjusted_path_jobs = get_path_jobdata(pj->ji_qs.ji_jobid, path_jobs);
     snprintf(namebuf, sizeof(namebuf), "%s%s%s", adjusted_path_jobs.c_str(),
@@ -2202,7 +2231,7 @@ int req_commit(
       log_ext(-1, __func__, log_buf, LOG_WARNING);
       }
     }
-  
+
   /* job array, setup the array task
      *** job array under development */
   if (pj->ji_is_array_template)
@@ -2257,7 +2286,7 @@ int req_commit(
         {
         snprintf(log_buf, LOCAL_LOG_BUF_SIZE, "Could not queue job %s",
           pj->ji_qs.ji_jobid);
-        
+
         log_err(rc, pj->ji_qs.ji_jobid, log_buf);
         }
 
@@ -2318,10 +2347,10 @@ int req_commit(
         {
         snprintf(log_buf, LOCAL_LOG_BUF_SIZE, "cannot save job %s",
           pj->ji_qs.ji_jobid);
-        
+
         log_record(PBSEVENT_JOB, PBS_EVENTCLASS_JOB, pj->ji_qs.ji_jobid, log_buf);
         }
-      
+
        if (!pj->ji_is_array_template)
          {
          decrement_queued_jobs(pque->qu_uih, pj->ji_wattr[JOB_ATR_job_owner].at_val.at_str, pj);
@@ -2332,12 +2361,12 @@ int req_commit(
       req_reject(rc, 0, preq, NULL, log_buf);
       return(rc);
       }
-    
-    /* this needs to be done if there are routing queues. queue_route checks to see if req_commit 
+
+    /* this needs to be done if there are routing queues. queue_route checks to see if req_commit
        is done routing the job with this flag */
     pj->ji_commit_done = 1;
 
-    /* need to format message first, before request goes away - 
+    /* need to format message first, before request goes away -
      * moved here because we have the queue name */
     snprintf(log_buf, sizeof(log_buf),
       msg_jobnew,
@@ -2377,7 +2406,7 @@ int req_commit(
   /* acknowledge the request with the job id */
 
   reply_jobid(preq, pj->ji_qs.ji_jobid, BATCH_REPLY_CHOICE_Commit);
-  
+
   /* if job array, setup the cloning work task */
   if (pj->ji_is_array_template)
     {
@@ -2385,7 +2414,7 @@ int req_commit(
     log_event(PBSEVENT_JOB, PBS_EVENTCLASS_JOB, __func__, log_buf);
     enqueue_threadpool_request(job_clone_wt, strdup(pj->ji_qs.ji_jobid), task_pool);
     }
-    
+
   sprintf(log_buf, "job_id: %s", pj->ji_qs.ji_jobid);
   log_event(PBSEVENT_JOB,PBS_EVENTCLASS_JOB,__func__,log_buf);
 

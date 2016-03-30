@@ -1254,6 +1254,21 @@ attribute_def job_attr_def[] =
    ATR_TYPE_REQ,
    PARENT_TYPE_JOB},
 
+#ifdef GSSAPI
+  {
+    ATTR_krb_princ,
+    decode_str,
+    encode_str,
+    set_str,
+    comp_str,
+    free_str,
+    NULL_FUNC,
+    READ_WRITE | ATR_DFLAG_MOM | ATR_DFLAG_SvRD |ATR_DFLAG_SvWR,
+    ATR_TYPE_STR,
+    PARENT_TYPE_JOB
+  },
+#endif
+
 /* Site defined attributes if any, see site_job_attr_*.h  */
 #include "site_job_attr_def.h"
 

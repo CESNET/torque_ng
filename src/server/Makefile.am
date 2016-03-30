@@ -51,6 +51,10 @@ pbs_server_SOURCES = accounting.c array_func.c array_upgrade.c attr_recov.c \
          node_power_state.c req_modify_node.c mom_hierarchy_handler.cpp \
          completed_jobs_map.cpp restricted_host.cpp acl_special.cpp
 
+if INCLUDE_GSSAPI
+pbs_server_SOURCES += req_gssauthenuser.c
+endif
+
 install-exec-hook:
 	$(PBS_MKDIRS) aux || :
 	$(PBS_MKDIRS) server

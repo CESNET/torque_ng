@@ -6,7 +6,7 @@ CLEANFILES = *.gcda *.gcno *.gcov
 
 lib_LTLIBRARIES = libtorque.la
 
-libtorque_la_LDFLAGS = -version-info 2:0:0
+libtorque_la_LDFLAGS = -version-info 2:0:0 $(K5LIBS)
 
 libtorque_la_SOURCES = ../Libcsv/csv.c ../Libdis/dis.c \
         ../Libdis/discui_.c ../Libdis/discul_.c \
@@ -99,5 +99,6 @@ libtorque_la_SOURCES = ../Libcsv/csv.c ../Libdis/dis.c \
         ../Libattr/req.cpp ../Libattr/complete_req.cpp ../Libutils/u_mu.c \
 				../Libutils/u_misc.c ../Libutils/allocation.cpp
 
-
-
+if INCLUDE_GSSAPI
+libtorque_la_SOURCES  += ../Libifl/pbsgss.cpp
+endif

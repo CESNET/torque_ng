@@ -95,7 +95,7 @@
  */
 
 void appendEscapedXML(
-    
+
   const char *xml,
   std::string &str)
 
@@ -136,40 +136,40 @@ int size_to_str(
 
   {
   snprintf(out,space,"%lu",szv.atsv_num);
-  
+
   if (space - strlen(out) < 3)
     return(-1);
 
   /* SUCCESS */
-  
+
   switch (szv.atsv_shift)
     {
     case 10:
-      
+
       strcat(out,"kb");
-      
+
       break;
-      
+
     case 20:
-      
+
       strcat(out,"mb");
-      
+
       break;
-      
+
     case 30:
-      
+
       strcat(out,"gb");
-      
+
       break;
-      
+
     case 40:
-      
+
       strcat(out,"tb");
-      
+
       break;
-      
+
     case 50:
-      
+
       strcat(out,"pb");
     }
 
@@ -298,8 +298,8 @@ int attr_to_str(
           case ATR_TYPE_STR:
 
             /* Patch provided by Martin Siegert to fix seg-fault
-             * when current->rs_value.at_val.at_str is NULL 
-             * Bugzilla bug 101 
+             * when current->rs_value.at_val.at_str is NULL
+             * Bugzilla bug 101
              */
 
             if (current->rs_value.at_val.at_str == NULL)
@@ -312,7 +312,7 @@ int attr_to_str(
             ds += current->rs_defin->rs_name;
             ds += ">";
 
-            
+
             if (XML == true)
               appendEscapedXML(current->rs_value.at_val.at_str,ds);
             else
@@ -407,7 +407,7 @@ int attr_to_str(
 
 
 
-/* converts a string to an pbs_attribute 
+/* converts a string to an pbs_attribute
  * @return PBSE_NONE on success
  */
 
@@ -557,7 +557,7 @@ int str_to_attr(
 
           break;
           }
-        
+
         if ((rc = decode_resc(&(attr[index]),name,resc_parent,resc_child,ATR_DFLAG_ACCESS)))
           {
           snprintf(log_buf,sizeof(log_buf),
@@ -565,7 +565,7 @@ int str_to_attr(
             name,
             resc_parent,
             resc_child);
-          
+
           errFlg = TRUE;
 
           log_err(rc, __func__, log_buf);
@@ -598,7 +598,7 @@ int str_to_attr(
 
           break;
           }
-        
+
         if ((rc = decode_attr_req_info(&(attr[index]),name,resc_parent,resc_child,ATR_DFLAG_ACCESS)))
           {
           snprintf(log_buf,sizeof(log_buf),
@@ -606,7 +606,7 @@ int str_to_attr(
             name,
             resc_parent,
             resc_child);
-          
+
           errFlg = TRUE;
 
           log_err(rc, __func__, log_buf);

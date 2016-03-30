@@ -430,7 +430,7 @@ mom_server *mom_server_find_by_ip(
     pms = &mom_servers[sindex];
 
     ipaddr = ntohl(pms->sock_addr.sin_addr.s_addr);
-    
+
     if (ipaddr == search_ipaddr)
       {
       return(pms);
@@ -883,6 +883,7 @@ void gen_gen(
       s += value;
       status.push_back(s);
       }
+
     } /* else if (ap) */
 
   return;
@@ -1053,7 +1054,7 @@ stat_record stats[] = {
  */
 
 void generate_server_status(
-    
+
   std::vector<std::string> &status)
 
   {
@@ -1103,18 +1104,18 @@ int should_request_cluster_addrs()
 
 
 
-/* 
+/*
  * writes the header for a server status update
  *
  *  Header format
  *
- *   Protocol | Version | Command (IS_STATUS) | mom service port | mom manager port 
+ *   Protocol | Version | Command (IS_STATUS) | mom service port | mom manager port
  *   The following two lines are added to the header if cgroups are enabled.
  *   | available sockets | available numa_nodes | available cores | available threads
  *   | total sockets     | total numa_nodes     | total cores     | total threads
  */
 int write_update_header(
-    
+
   struct tcp_chan *chan,
   const char *id,
   const char *name)
@@ -1122,7 +1123,7 @@ int write_update_header(
   {
   int  ret;
   char buf[MAXLINE];
-  
+
   if ((ret = is_compose(chan, name, IS_STATUS)) == DIS_SUCCESS)
     {
     if ((ret = diswus(chan, pbs_mom_port)) == DIS_SUCCESS)
@@ -1133,7 +1134,7 @@ int write_update_header(
           {
           /* write this node's name first - alps handles this separately */
           snprintf(buf,sizeof(buf),"node=%s",mom_alias);
-          
+
           if ((ret = diswst(chan, buf)) != DIS_SUCCESS)
             mom_server_stream_error(chan->sock, name, id, "writing status string");
           else if (should_request_cluster_addrs() == TRUE)
@@ -1154,19 +1155,19 @@ int write_update_header(
 
 
 int write_my_server_status(
- 
+
   struct tcp_chan          *chan,
   const char               *id,
   std::vector<std::string> &strings,
   void                     *dest,
   int                       mode)
- 
+
   {
   int          ret = DIS_SUCCESS;
 
   mom_server  *pms;
   node_comm_t *nc;
- 
+
   /* put each string into the message. */
   for (unsigned int i = 0; i < strings.size(); i++)
     {
@@ -1177,32 +1178,32 @@ int write_my_server_status(
       sprintf(log_buffer,"%s: sending to server \"%s\", i = %u size = %d",
         id,
         str_to_write, i, (int)strings.size());
-      
+
       log_record(PBSEVENT_SYSTEM,0,id,log_buffer);
       }
-    
+
     if ((ret = diswst(chan, str_to_write)) != DIS_SUCCESS)
       {
       switch (mode)
         {
         case UPDATE_TO_SERVER:
-          
+
           pms = (mom_server *)dest;
-          
+
           mom_server_stream_error(chan->sock, pms->pbs_servername, id, "writing status string");
-          
+
           break;
-          
+
         case UPDATE_TO_MOM:
-          
+
           nc = (node_comm_t *)dest;
           nc->stream = chan->sock;
-          
+
           node_comm_error(nc, "Error writing strings to");
-          
+
           break;
         } /* END switch (mode) */
-      
+
       break;
       }
     }
@@ -1215,12 +1216,12 @@ int write_my_server_status(
 
 
 int write_cached_statuses(
- 
+
   struct tcp_chan *chan,
   const char      *id,
   void            *dest,
   int              mode)
- 
+
   {
   int            ret = DIS_SUCCESS;
   received_statuses.lock();
@@ -1230,7 +1231,7 @@ int write_cached_statuses(
   mom_server    *pms;
   node_comm_t   *nc;
   bool           error = false;
-  
+
   /* traverse the received_nodes array and send/clear the updates */
   while (((rn = iter->get_next_item()) != NULL) &&
          (error == false))
@@ -1243,10 +1244,10 @@ int write_cached_statuses(
         sprintf(log_buffer,"%s: sending to server \"%s\"",
           id,
           cp);
-        
+
         log_record(PBSEVENT_SYSTEM,0,id,log_buffer);
         }
-      
+
       if ((ret = diswst(chan,cp)) != DIS_SUCCESS)
         {
         error = true;
@@ -1255,28 +1256,28 @@ int write_cached_statuses(
         switch (mode)
           {
           case UPDATE_TO_SERVER:
-            
+
             pms = (mom_server *)dest;
-            
+
             mom_server_stream_error(chan->sock, pms->pbs_servername, id, "writing status string");
-            
+
             break;
-            
+
           case UPDATE_TO_MOM:
-            
+
             nc = (node_comm_t *)dest;
             nc->stream = chan->sock;
-            
+
             node_comm_error(nc,"Error writing strings to");
-            
+
             break;
           } /* END switch (mode) */
-        
+
         break;
         }
-      
+
       } /* END write each string */
-    
+
     rn->statuses.clear();
     } /* END iterate over received statuses */
 
@@ -1300,12 +1301,12 @@ int write_cached_statuses(
  * @param mom_server_all_update_stat() - parent
  * @param pms pointer to mom_server instance
  */
- 
+
 int mom_server_update_stat(
- 
+
   mom_server               *pms,
   std::vector<std::string> &strings)
- 
+
   {
   int              stream;
   int              ret = -1;
@@ -1316,12 +1317,12 @@ int mom_server_update_stat(
       (time_now < (pms->MOMLastSendToServerTime + get_stat_update_interval())))
     {
     /* No server is defined for this slot */
-    
+
     return(NO_SERVER_CONFIGURED);
     }
 
   stream = tcp_connect_sockaddr((struct sockaddr *)&pms->sock_addr, sizeof(pms->sock_addr), false);
- 
+
   if (IS_VALID_STREAM(stream))
     {
     if ((chan = DIS_tcp_setup(stream)) == NULL)
@@ -1349,9 +1350,9 @@ int mom_server_update_stat(
 
     if (chan != NULL)
       DIS_tcp_cleanup(chan);
-      
+
     close(stream);
-  
+
     if (ret != DIS_SUCCESS)
       {
 
@@ -1373,9 +1374,9 @@ int mom_server_update_stat(
           snprintf(log_buffer,sizeof(log_buffer), "Couldn't send update to server");
           }
         }
-      
+
       log_err(-1,__func__,log_buffer);
-      
+
       /* force another update to the server so we get this out there */
       UpdateFailCount++;
       }
@@ -1385,17 +1386,17 @@ int mom_server_update_stat(
       if (LOGLEVEL >= 3)
         {
         sprintf(log_buffer, "status update successfully sent to %s", pms->pbs_servername);
-        
+
         log_record(PBSEVENT_SYSTEM, 0, __func__, log_buffer);
 
         }
-        
+
       rc = PBSE_NONE;
-      
-      /* It would be redundant to send state since it is already in status */  
+
+      /* It would be redundant to send state since it is already in status */
       pms->ReportMomState = 0;
 
-#ifndef NUMA_SUPPORT      
+#ifndef NUMA_SUPPORT
       pms->MOMLastSendToServerTime = time_now;
 #else
       if (numa_index + 1 >= num_node_boards)
@@ -1403,7 +1404,7 @@ int mom_server_update_stat(
 #endif
       ForceServerUpdate = false;
       LastServerUpdateTime = time_now;
-      
+
       UpdateFailCount = 0;
       }
     } /* END if valid stream */
@@ -1411,7 +1412,7 @@ int mom_server_update_stat(
     {
     UpdateFailCount++;
     }
-  
+
   return(rc);
   }  /* END mom_server_update_stat() */
 
@@ -1420,14 +1421,14 @@ int mom_server_update_stat(
 
 
 void node_comm_error(
- 
+
   node_comm_t *nc,
   const char *message)
- 
+
   {
   snprintf(log_buffer,sizeof(log_buffer), "%s %s", message, nc->name.c_str());
   log_err(-1, "Node communication process",log_buffer);
-  
+
   close(nc->stream);
   nc->stream = -1;
   nc->bad = TRUE;
@@ -1438,10 +1439,10 @@ void node_comm_error(
 
 
 int write_status_strings(
- 
+
   std::vector<std::string> &strings,
   node_comm_t              *nc)
- 
+
   {
   int            fds = nc->stream;
   int            rc = DIS_SUCCESS;
@@ -1453,7 +1454,7 @@ int write_status_strings(
       "Attempting to send status update to mom %s", nc->name.c_str());
     log_record(PBSEVENT_SYSTEM, PBS_EVENTCLASS_SERVER, __func__, log_buffer);
     }
- 
+
   if ((chan = DIS_tcp_setup(fds)) == NULL)
     {
     }
@@ -1485,7 +1486,7 @@ int write_status_strings(
     DIS_tcp_cleanup(chan);
   pbs_disconnect_socket(fds);
   nc->stream = -1;
- 
+
   return(rc);
   } /* END write_status_strings() */
 
@@ -1493,23 +1494,23 @@ int write_status_strings(
 
 
 
-/* send_update() 
+/* send_update()
  *
- * decides whether or not a status update should be sent, including using a 
+ * decides whether or not a status update should be sent, including using a
  * back-off algorithm for continuously failures
  */
 
 int send_update()
-  
+
   {
   int mod_value;
 
   if (first_update_time > time_now)
     return(FALSE);
-  
+
   if (time_now < (LastServerUpdateTime + get_stat_update_interval()))
     return(FALSE);
-  
+
   long attempt_diff;
 
   if (UpdateFailCount == 0)
@@ -1543,7 +1544,7 @@ int send_update()
  */
 
 int append_gpu_status(
-    
+
   std::vector<std::string> &source,
   std::vector<std::string> &destination)
 
@@ -1622,10 +1623,10 @@ int send_status_through_hierarchy()
         nc->mtime = time_now;
         nc = force_path_update(mh);
         }
-      else 
+      else
         {
         rc = PBSE_NONE;
-  
+
         close(nc->stream);
         break;
         }
@@ -1646,7 +1647,7 @@ int send_status_through_hierarchy()
  */
 
 void mom_server_all_update_stat(void)
- 
+
   {
   pid_t        pid;
   int          fd_pipe[2];
@@ -1663,17 +1664,17 @@ void mom_server_all_update_stat(void)
     /* no update is needed */
     return;
     }
- 
+
   if (PBSNodeCheckInterval > 0)
     check_state((LastServerUpdateTime == 0));
- 
+
   LastUpdateAttempt = time_now;
- 
+
   /* We generate the status once, because this might be costly.
    * The dynamic string mom_status will contain NULL terminated strings.
    * The end of the buffer is marked with an empty string i.e. NULL NULL.
    */
- 
+
   if (LOGLEVEL >= 6)
     {
     log_record(PBSEVENT_SYSTEM, 0, __func__, "composing status update for server");
@@ -1700,10 +1701,10 @@ void mom_server_all_update_stat(void)
 
 #ifdef MIC
     check_for_mics(global_mic_count);
-#endif 
+#endif
 
-    /* It is possible that pbs_server may get busy and start queing incoming requests and not be able 
-       to process them right away. If pbs_mom is waiting for a reply to a statuys update that has 
+    /* It is possible that pbs_server may get busy and start queing incoming requests and not be able
+       to process them right away. If pbs_mom is waiting for a reply to a statuys update that has
        been queued and at the same time the server makes a request to the mom we can get stuck
        in a pseudo live-lock state. That is the server is waiting for a response from the mom and
        the mom is waiting for a response from the server. neither of which will come until a request times out.
@@ -1726,17 +1727,17 @@ void mom_server_all_update_stat(void)
 
     if (pid > 0)
       {
-      // PARENT 
+      // PARENT
       close(fd_pipe[1]);
       ForceServerUpdate = false;
       LastServerUpdateTime = time_now;
       UpdateFailCount = 0;
       updates_waiting_to_send = 0;
-    
+
       received_node                                             *rn;
       received_statuses.lock();
       container::item_container<received_node *>::item_iterator *iter = received_statuses.get_iterator();
-      
+
       // clear cached statuses from hierarchy
       while ((rn = iter->get_next_item()) != NULL)
         rn->statuses.clear();
@@ -1778,7 +1779,7 @@ void mom_server_all_update_stat(void)
 #endif /* NUMA_SUPPORT */
       {
       update_mom_status();
-  
+
       if (send_status_through_hierarchy() != PBSE_NONE)
         rc = send_update_to_a_server();
       }
@@ -1788,10 +1789,10 @@ void mom_server_all_update_stat(void)
     write(fd_pipe[1], buf, len);
 
     exit_called = true;
-  
+
     exit(0);
     }
- 
+
   }  /* END mom_server_all_update_stat() */
 
 
@@ -1979,7 +1980,7 @@ void mom_server_all_diag(
  * @param command_name The name of the command that was received.
  */
 void mom_server_update_receive_time(
-    
+
   int stream,
   char *command_name,
   struct sockaddr_in *pAddr)
@@ -2007,9 +2008,9 @@ void mom_server_update_receive_time(
  * mom_server_update_receive_time_by_ip
  *
  * This is a little weird as this is called from code
- * in the server directory, mom_process_request.  There is no 
- * stream number there but instead there is an IP address and so 
- * we use that to look up the server and update the info. 
+ * in the server directory, mom_process_request.  There is no
+ * stream number there but instead there is an IP address and so
+ * we use that to look up the server and update the info.
  *
  * @param ipaddr The IP address from which the command was received.
  * @param command_name The name of the command that was received.
@@ -2164,20 +2165,20 @@ int process_host_name(
   unsigned long       ipaddr;
   struct addrinfo    *addr_info;
   struct sockaddr_in  sa;
-      
+
   rm_port      = PBS_MANAGER_SERVICE_PORT;
-  
+
   if ((colon = strchr(hostname, ':')) != NULL)
     {
     *colon = '\0';
     rm_port = (unsigned short)atoi(colon+1);
     }
-  
+
   if (overwrite_cache(hostname, &addr_info))
     {
     sa.sin_addr = ((struct sockaddr_in *)addr_info->ai_addr)->sin_addr;
     ipaddr      = ntohl(sa.sin_addr.s_addr);
-    
+
     if (path_complete == FALSE)
       {
       add_network_entry(mh, hostname, addr_info, rm_port, path, level);
@@ -2215,7 +2216,7 @@ int am_i_on_this_level(
         (*(myself - 1) == ','))
       {
       myself += strlen(mom_alias);
-      
+
       if ((*myself == '\0') ||
           (*myself == ',')  ||
           (*myself == ':'))
@@ -2274,7 +2275,7 @@ int process_level_string(
 
 
 
-/* 
+/*
  * re-order the paths, the shallowest being first, because
  * we want to try the shallowest path
  **/
@@ -2398,7 +2399,7 @@ int read_cluster_addresses(
         }
       else if (something_added == FALSE)
         {
-        /* if we're on the first level of the path, we didn't record anything 
+        /* if we're on the first level of the path, we didn't record anything
          * and we need to decrement the path_index */
         path_index--;
         hierarchy_file.clear();
@@ -2449,7 +2450,7 @@ int read_cluster_addresses(
     {
     received_cluster_addrs = true;
     send_update_soon();
-    
+
     sort_paths();
 
     /* log the hierrarchy */
@@ -2464,7 +2465,7 @@ int read_cluster_addresses(
 
       free(okclients_list);
       }
- 
+
     /* tell the mom to go ahead and send an update to pbs_server */
     first_update_time = 0;
     }
@@ -2477,11 +2478,11 @@ int read_cluster_addresses(
 
 
 /**
- * Request is coming from another server (i.e., pbs_server) over a DIS 
+ * Request is coming from another server (i.e., pbs_server) over a DIS
  * stream (process 'hello' and 'cluster_addrs' request).
  *
  * @see is_compose() - peer - generate message to send to pbs_server.
- * @see mom_process_request() - peer - handle jobstart, 
+ * @see mom_process_request() - peer - handle jobstart,
  *      jobcancel, etc messages.
  *
  * Read the stream to get a Inter-Server request.
@@ -2497,7 +2498,7 @@ void mom_is_request(
   {
   int                 command = 0;
   int                 ret = DIS_SUCCESS;
- 
+
   char               *err_msg = NULL;
   u_long              ipaddr;
   extern char        *PBSServerCmds[];
@@ -2552,7 +2553,7 @@ void mom_is_request(
 
   if (err_msg)
     free(err_msg);
- 
+
   command = disrsi(chan, &ret);
 
   if (ret != DIS_SUCCESS)
@@ -2561,20 +2562,20 @@ void mom_is_request(
     {
     if (cmdp != NULL)
       *cmdp = command;
-    
+
     if (LOGLEVEL >= 3)
       {
       sprintf(log_buffer, "command %d, \"%s\", received",
         command,
         PBSServerCmds[command]);
-      
+
       log_record(
         PBSEVENT_ERROR,
         PBS_EVENTCLASS_JOB,
         __func__,
         log_buffer);
       }
-    
+
     mom_server_update_receive_time(chan->sock, PBSServerCmds[command],pAddr);
     }
 
@@ -2609,7 +2610,7 @@ void mom_is_request(
 
       if (read_status_strings(chan,version) < 0)
         ret = -1;
-  
+
       break;
 
     default:
@@ -2625,7 +2626,7 @@ void mom_is_request(
   if (ret != DIS_SUCCESS)
     {
     /* We come here if we got a DIS read error or a protocol element is missing.  */
- 
+
     if (ret > 0)
       {
       sprintf(log_buffer, "%s from %s", dis_emsg[ret], netaddr(pAddr));
@@ -2915,7 +2916,7 @@ void check_state(
     {
     if (ICount == 0)
       {
-      /* only do this when running the check script, otherwise down nodes are 
+      /* only do this when running the check script, otherwise down nodes are
        * marked as up */
       /* clear node state and node messages */
 
@@ -3005,7 +3006,7 @@ void shutdown_to_server(
   char             error_buf[MAXLINE];
   struct tcp_chan *chan = NULL;
 
-  /* We high jacked this function from state_to_server. We are modifying it 
+  /* We high jacked this function from state_to_server. We are modifying it
      so we make our own connection to the server */
 
   ipaddr = htonl(pms->sock_addr.sin_addr.s_addr);
@@ -3024,7 +3025,7 @@ void shutdown_to_server(
     {
     goto shutdown_to_server_done;
     }
-  
+
   if ((ret = diswus(chan, pbs_rm_port)) != DIS_SUCCESS)
     {
     goto shutdown_to_server_done;
@@ -3115,13 +3116,13 @@ void state_to_server(
       {
       /* send successful, unset ReportMomState */
       pms->ReportMomState = 0;
-      
+
       if (LOGLEVEL >= 4)
         {
         sprintf(log_buffer, "sent updated state 0x%x to server %s",
           internal_state,
           pms->pbs_servername);
-        
+
         log_record(PBSEVENT_ERROR, PBS_EVENTCLASS_JOB, __func__, log_buffer);
         }
       }
@@ -3274,7 +3275,7 @@ int mom_open_socket_to_jobs_server(
       close(sock);
       sock = sock3;
       }
-   
+
     /* Associate a message handler with the connection */
     if ((message_handler != NULL)&&(sock >= 0))
       {
@@ -3354,15 +3355,15 @@ int is_mom_server_down(
  * the device in the string to see if it is the same
  * as this host. If yes return true, else return false
  *
- * @param device_spec - string with the job specification 
- *                   indicating the node and device index to be run 
+ * @param device_spec - string with the job specification
+ *                   indicating the node and device index to be run
  *                   in the job.
  *
  */
 
 bool is_for_this_host(
-    
-  std::string device_spec, 
+
+  std::string device_spec,
   const char *suffix)
 
   {
@@ -3403,9 +3404,9 @@ bool is_for_this_host(
   }
 
 void get_device_indices(
-  
-  const char *device_str, 
-  std::vector<unsigned int> &device_indices, 
+
+  const char *device_str,
+  std::vector<unsigned int> &device_indices,
   const char *suffix)
 
   {
@@ -3431,7 +3432,7 @@ void get_device_indices(
     device_tokens.push_back(*t);
     }
 
-  /* We now have each device request in the form of <host>-device/x where 
+  /* We now have each device request in the form of <host>-device/x where
      x is the indices of the device to allocate. See the spec is for this host
      and add the index to device_indices if it is. */
   for (std::vector<std::string>::iterator device_spec = device_tokens.begin(); device_spec != device_tokens.end(); ++device_spec)
@@ -3455,7 +3456,7 @@ void get_device_indices(
     /* parts should have two entries. */
     /* The first part will be the host name */
     host_name_part = parts[0].c_str();
-    
+
     /* The second part will be the index */
     device_index_part = parts[1].c_str();
 

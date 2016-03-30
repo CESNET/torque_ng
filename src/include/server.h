@@ -197,6 +197,11 @@ enum srv_atr
 #ifdef MUNGE_AUTH
   SRV_ATR_authusers,
 #endif
+#ifdef GSSAPI
+  SRV_ATR_krb_realm_submit_acl,
+  SRV_ATR_acl_krb_realm_enable,
+  SRV_ATR_acl_krb_realms,
+#endif
   SRV_ATR_minthreads,
   SRV_ATR_maxthreads,
   SRV_ATR_threadidleseconds,

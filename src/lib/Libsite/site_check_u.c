@@ -122,7 +122,7 @@ extern struct pbsnode *find_nodebyname(const char *);
 int initialize_ruserok_mutex()
   {
   int rc;
-  
+
   rc = pthread_mutex_init(&ruserok_mutex, NULL);
   return(rc);
   }
@@ -130,7 +130,7 @@ int initialize_ruserok_mutex()
 
 
 bool is_permitted_by_node_submit(
-    
+
   const char *orighost,
   int         logging)
 
@@ -345,6 +345,10 @@ int site_check_user_map(
   if (dptr != NULL)
     *dptr = '.';
 
+#ifdef GSSAPI
+  return 0;
+#endif
+
 #ifdef MUNGE_AUTH
   sprintf(uh, "%s@%s", owner, orighost);
   rc = acl_check(&server.sv_attr[SRV_ATR_authusers], uh, ACL_User_Host);
@@ -362,13 +366,13 @@ int site_check_user_map(
   else
     {
     /*SUCCESS*/
-    rc = 0; /* the call to ruserok below was in the code first. ruserok returns 
-               0 on success but acl_check returns a positive value on success. 
+    rc = 0; /* the call to ruserok below was in the code first. ruserok returns
+               0 on success but acl_check returns a positive value on success.
                We set rc to 0 to be consistent with the original ruserok functionality */
     }
 #else
 
-  /* ruserok is the last chance the incoming submission can work. 
+  /* ruserok is the last chance the incoming submission can work.
      check to see if the user hosts combination is allowed */
   /* ruserok is not thread safe. mutex it */
   pthread_mutex_lock(&ruserok_mutex);
@@ -389,10 +393,10 @@ int site_check_user_map(
     rc = -1;
     }
 
-    
+
 #endif
 
-   
+
 
 #ifdef sun
   /* broken Sun ruserok() sets process so it appears to be owned */

@@ -2599,6 +2599,12 @@ int manager_oper_chk(
   struct array_strings *pstr;
   char                  log_buf[LOCAL_LOG_BUF_SIZE];
 
+#ifdef GSSAPI
+    // with gssapi, the entries in the list are probably kerberos principals,
+    // and there's no quick way to verify them.  So just return 0.
+    return 0;
+#endif
+
   if (actmode == ATR_ACTION_FREE)
     {
     return(0); /* no checking on free */

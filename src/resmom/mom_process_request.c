@@ -82,7 +82,7 @@ extern int LOGLEVEL;
 static const int munge_on = 1;
 #else
 static const int munge_on = 0;
-#endif 
+#endif
 
 static void mom_close_client(int sfds);
 static void freebr_manage(struct rq_manage *);
@@ -223,6 +223,14 @@ void *mom_process_request(
     log_event(PBSEVENT_DEBUG2, PBS_EVENTCLASS_REQUEST, "", log_buffer);
     }
 
+#ifdef GSSAPI
+  if (request->rq_type == PBS_BATCH_GSSAuthenUser)
+    {
+    req_reject(PBSE_BADCRED,0,request,NULL,"pbs_mom didn't expect PBS_BATCH_GSSAuthenUser");
+    return NULL;
+    }
+#endif
+
   /* is the request from a host acceptable to the server */
 
     {
@@ -332,7 +340,7 @@ void mom_dispatch_request(
       net_add_close_func(sfds, close_quejob);
 
       mom_req_quejob(request);
-      
+
       break;
 
     case PBS_BATCH_JobCred:
@@ -344,13 +352,13 @@ void mom_dispatch_request(
     case PBS_BATCH_jobscript:
 
       req_jobscript(request);
-      
+
       break;
 
     case PBS_BATCH_RdytoCommit:
 
       req_rdytocommit(request);
-      
+
       break;
 
     case PBS_BATCH_Commit:
@@ -364,11 +372,11 @@ void mom_dispatch_request(
     case PBS_BATCH_DeleteJob:
 
       req_deletejob(request);
-      
+
       break;
 
     case PBS_BATCH_HoldJob:
-      
+
       mom_req_holdjob(request);
 
       break;
@@ -454,6 +462,12 @@ void mom_dispatch_request(
       req_change_power_state(request);
 
       break;
+
+#ifdef GSSAPI
+    case PBS_BATCH_GSSAuthenUser:
+      /* already handled */
+      break;
+#endif /* GSSAPI */
 
     default:
 
@@ -578,7 +592,7 @@ static void close_quejob(
 
         pjob = NULL;
         }
-      
+
       break;
       }  /* END if (..) */
 

@@ -125,6 +125,10 @@
 #include <sys/category.h>
 #endif
 
+#ifdef GSSAPI
+#include "renew.h"
+#endif
+
 #ifdef HAVE_WORDEXP
 #include <wordexp.h>
 
@@ -193,7 +197,7 @@ static char  *output_retained = (char *)"Output retained on that host in: ";
 static char   rcperr[MAXPATHLEN]; /* file to contain rcp error */
 
 extern int  LOGLEVEL;
-extern char checkpoint_run_exe_name[]; 
+extern char checkpoint_run_exe_name[];
 
 /* prototypes */
 
@@ -248,7 +252,8 @@ static pid_t fork_to_user(
   struct batch_request *preq,   /* I */
   int                   SetUID, /* I (boolean) */
   char                 *HDir,   /* O (job/user home directory) */
-  char                 *EMsg)   /* I (optional,minsize=1024) */
+  char                 *EMsg,   /* I (optional,minsize=1024) */
+  struct krb_holder *ticket)
 
   {
   struct group   *grpp;
@@ -468,6 +473,13 @@ static pid_t fork_to_user(
     }
 
 #endif /* _CRAY */
+
+#ifdef GSSAPI
+  if (pjob != NULL)
+    init_ticket_from_job(pjob,NULL,ticket);
+  else
+    init_ticket_from_req(preq->rq_extend,preq->rq_ind.rq_cpyfile.rq_jobid,ticket);
+#endif
 
   /* NOTE:  only chdir now if SetUID is TRUE */
 
@@ -1670,7 +1682,7 @@ void req_modifyjob(
     {
     momport = pbs_rm_port;
     }
-  
+
   job_save(pjob, SAVEJOB_FULL, momport);
 
   sprintf(log_buffer, msg_manager,
@@ -1837,7 +1849,7 @@ int sigalltasks_sisters(
       {
       ret = ENOMEM;
       }
-    else if ((ret = im_compose(chan, 
+    else if ((ret = im_compose(chan,
             pjob->ji_qs.ji_jobid,
             cookie,
             IM_SIGNAL_TASK,
@@ -2085,8 +2097,8 @@ static void resume_suspend(
  * Signal may be either a numeric string or a signal name
  * with or without the "SIG" prefix.
  *
- * NOTE:  mom_process_request() set up as request handler via 
- * accept_conn() 
+ * NOTE:  mom_process_request() set up as request handler via
+ * accept_conn()
  *
  * @see mom_process_request->dispatch_request() - parent
  * @see req_signaljob() in server/req_signal.c - peer
@@ -2285,7 +2297,7 @@ void req_signaljob(
           {
           momport = pbs_rm_port;
           }
-      
+
         job_save(pjob, SAVEJOB_QUICK, momport);
 
         exiting_tasks = 1;
@@ -2396,7 +2408,7 @@ void encode_used(
       if (mem_val == true)
         *list << rd->rs_name << "=" << val.at_val.at_long << "kb";
       else
-        *list << rd->rs_name << "=" << val.at_val.at_long; 
+        *list << rd->rs_name << "=" << val.at_val.at_long;
       }
 
     first = false;
@@ -2492,7 +2504,7 @@ void stat_single_job(
     append_link(&preply->brp_un.brp_status, &pstat->brp_stlink, pstat);
 
     encode_used(pjob, resc_access_perm, NULL, &pstat->brp_attr); /* adds resources_used attr */
-    
+
     /* adds other flagged attrs */
     encode_flagged_attrs(pjob, resc_access_perm, NULL, &pstat->brp_attr);
     }
@@ -2702,7 +2714,7 @@ int del_files(
           strerror(errno));
 
         add_bad_list(pbadfile,log_buffer,1);
-        
+
         free(path);
 
         return(-1);
@@ -2718,7 +2730,7 @@ int del_files(
           strerror(errno));
 
         add_bad_list(pbadfile,log_buffer,1);
-        
+
         free(path);
 
         return(-1);
@@ -2735,7 +2747,7 @@ int del_files(
         }
 
 #ifdef HAVE_WORDEXP
-      if (setuserenv && 
+      if (setuserenv &&
           (pjob = mom_find_job(preq->rq_ind.rq_cpyfile.rq_jobid)) != NULL)
         {
         InitUserEnv(pjob, NULL, NULL, NULL, NULL);
@@ -2967,9 +2979,9 @@ void req_rerunjob(
     else
       {
       /* FAILURE */
-      
+
       req_reject(PBSE_NOSERVER, 0, preq, NULL, NULL);
-      
+
       exit(0);
       }
     }
@@ -2998,7 +3010,7 @@ void req_rerunjob(
    * If so, do not remove files as the pbs_server will be sending a
    * copy files request.
   */
-  if ((pjob->ji_wattr[JOB_ATR_copystd_on_rerun].at_flags & ATR_VFLAG_SET) 
+  if ((pjob->ji_wattr[JOB_ATR_copystd_on_rerun].at_flags & ATR_VFLAG_SET)
     && (pjob->ji_wattr[JOB_ATR_copystd_on_rerun].at_val.at_long == 1))
       remove_file = 0;
 
@@ -3007,7 +3019,7 @@ void req_rerunjob(
 
   if (rc != 0 || rc2 != 0 || (!checkfile_sent_ok))
     {
-    /* FAILURE - cannot report file to server */ 
+    /* FAILURE - cannot report file to server */
     /* If the following condition is true, it means
      * the copying of output files to the server had a problem */
     if (checkfile_sent_ok)
@@ -3018,7 +3030,7 @@ void req_rerunjob(
         (char *)"cannot move output files to server");
 
     req_reject(rc, 0, preq, NULL, NULL);
-    
+
     close(sock);
     }
   else
@@ -3063,7 +3075,7 @@ void req_returnfiles(
       sprintf(log_buffer, "mom_open_socket_to_jobs_server FAILED to get socket: %d for job %s",
         sock,
         pjob->ji_qs.ji_jobid);
-      
+
       log_err(-1, __func__, log_buffer);
       sleep(1);
       }
@@ -3074,14 +3086,14 @@ void req_returnfiles(
         {
         return_file(pjob, StdOut, sock, FALSE);
         }
-      
+
       if (preq->rq_ind.rq_returnfiles.rq_return_stderr)
         {
         return_file(pjob, StdErr, sock, FALSE);
         }
-      
+
       reply_ack(preq);
-      
+
       close(sock);
       }
     }
@@ -3347,6 +3359,12 @@ void req_cpyfile(
   int             wordexperr = 0;
 #endif
 
+struct krb_holder *ticket = NULL;
+#ifdef GSSAPI
+  ticket = alloc_ticket();
+#endif
+
+
   /* there is nothing to copy */
   if (spoolasfinalname == TRUE)
     {
@@ -3372,7 +3390,7 @@ void req_cpyfile(
     log_event(PBSEVENT_JOB, PBS_EVENTCLASS_JOB, preq->rq_ind.rq_cpyfile.rq_jobid, log_buffer);
     }
 
-  rc = (int)fork_to_user(preq, TRUE, HDir, EMsg);
+  rc = (int)fork_to_user(preq, TRUE, HDir, EMsg, ticket);
 
   if (rc < 0)
     {
@@ -3538,10 +3556,20 @@ void req_cpyfile(
         madefaketmpdir = 1;
         }
       }
+
+#ifdef GSSAPI
+    setenv("KRB5CCNAME",get_ticket_ccname(ticket),1);
+#endif
     }
   else
     {
     InitUserEnv(pjob, NULL, NULL, NULL, NULL);
+#ifdef GSSAPI
+    if (got_ticket(ticket))
+      {
+      bld_env_variables(&vtable, "KRB5CCNAME", get_ticket_ccname(ticket));
+      }
+#endif
 
     *(vtable.v_envp + vtable.v_used) = NULL;
 
@@ -4082,6 +4110,10 @@ error:
 #endif
     }  /* END for (pair) */
 
+#ifdef GSSAPI
+  free_ticket(ticket);
+#endif
+
 #ifdef HAVE_WORDEXP
   if (madefaketmpdir && !usedfaketmpdir)
     {
@@ -4127,7 +4159,12 @@ void req_delfile(
   char   HDir[1024];
   char   EMsg[1024];
 
-  rc = (int)fork_to_user(preq, FALSE, HDir, EMsg);
+  struct krb_holder *ticket = NULL;
+#ifdef GSSAPI
+  ticket = alloc_ticket();
+#endif
+
+  rc = (int)fork_to_user(preq, FALSE, HDir, EMsg, ticket);
 
   if (rc < 0)
     {
@@ -4155,7 +4192,13 @@ void req_delfile(
 
   /* delete the files */
 
-  if ((rc = del_files(preq, HDir, 1, &bad_list)))
+  rc = del_files(preq, HDir, 1, &bad_list);
+
+#ifdef GSSAPI
+  free_ticket(ticket);
+#endif
+
+  if (rc)
     {
     /* FAILURE */
 
@@ -4201,7 +4244,7 @@ job *job_with_reservation_id(
 
 
 void req_delete_reservation(
-    
+
   struct batch_request *request)
 
   {
@@ -4211,7 +4254,7 @@ void req_delete_reservation(
 
   if (rsv_id != NULL)
     {
-    if ((pjob=job_with_reservation_id(rsv_id)) == NULL) 
+    if ((pjob=job_with_reservation_id(rsv_id)) == NULL)
       {
       if ((rc = destroy_alps_reservation(rsv_id, apbasil_path, apbasil_protocol, 1)) != PBSE_NONE)
         {
@@ -4222,7 +4265,7 @@ void req_delete_reservation(
       }
     else
       {
-      snprintf(log_buffer, sizeof(log_buffer), "Ignored release reservation request from server for reservation id %s because of job %s", 
+      snprintf(log_buffer, sizeof(log_buffer), "Ignored release reservation request from server for reservation id %s because of job %s",
         rsv_id, pjob->ji_qs.ji_jobid);
       log_record(PBSEVENT_JOB, PBS_EVENTCLASS_JOB, __func__, log_buffer);
       }
@@ -4248,7 +4291,7 @@ void req_delete_reservation(
  * https://www.kernel.org/doc/Documentation/power/states.txt
  */
 void req_change_power_state(
-    
+
   batch_request *request)
 
   {

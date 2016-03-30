@@ -132,7 +132,7 @@ int dis_request_read(
   char  log_buf[LOCAL_LOG_BUF_SIZE];
 
 #ifdef PBS_MOM
-  /* NYI: talk to Ken about this. This is necessary due to the changes to 
+  /* NYI: talk to Ken about this. This is necessary due to the changes to
    * decode_DIS_ReqHdr */
   proto_type = disrui(chan, &rc);
 #endif
@@ -362,19 +362,19 @@ int dis_request_read(
       rc = decode_DIS_Register(chan, request);
 
       break;
-      
+
     case PBS_BATCH_AuthenUser:
-      
+
       rc = decode_DIS_Authen(chan, request);
-      
+
       break;
 
     case PBS_BATCH_AltAuthenUser:
-      
+
       rc = decode_DIS_AltAuthen(chan, request);
-      
+
       break;
-      
+
     case PBS_BATCH_JobObit:
 
       rc = decode_DIS_JobObit(chan, request);
@@ -382,17 +382,17 @@ int dis_request_read(
       break;
 
 #else  /* PBS_MOM */
-      
+
     /* pbs_mom services */
-    
+
     case PBS_BATCH_DeleteReservation:
 
       /* NO-OP: this one is just a header and an extension string */
 
       break;
-      
+
     case PBS_BATCH_ReturnFiles:
-      
+
       rc = decode_DIS_ReturnFiles(chan, request);
 
       break;
@@ -412,6 +412,13 @@ int dis_request_read(
       break;
 
 #endif /* PBS_MOM */
+
+#ifdef GSSAPI
+    case PBS_BATCH_GSSAuthenUser:
+      /* nothing to do here.  There's no body in the request */
+      break;
+
+#endif /* GSSAPI */
 
     default:
 

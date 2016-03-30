@@ -86,6 +86,7 @@
 #ifndef _PBS_IFL_DEF
 #define _PBS_IFL_DEF
 #include <sys/socket.h>
+#include "pbs_config.h"
 
 /* Attribute Names used by user commands */
 
@@ -325,6 +326,11 @@
 #ifdef MUNGE_AUTH
   #define ATTR_authusers       "authorized_users"
 #endif
+#ifdef GSSAPI
+#define ATTR_krb_realm_submit_acl "krb_realm_submit_acl"
+#define ATTR_acl_krb_realm_enable "acl_krb_realm_enable"
+#define ATTR_acl_krb_realms "acl_krb_realms"
+#endif
 #define ATTR_minthreads          "min_threads"
 #define ATTR_maxthreads          "max_threads"
 #define ATTR_threadidleseconds   "thread_idle_seconds"
@@ -340,6 +346,7 @@
 #define ATTR_pass_cpu_clock           "pass_cpu_clock"
 #define ATTR_request_version          "request_version"
 #define ATTR_req_information          "req_information"
+#define ATTR_krb_princ                "krb_princ"
 /* additional node "attributes" names */
 
 #define ATTR_NODE_state                "state"
@@ -511,7 +518,12 @@
 #define MAXNAMLEN  255
 #endif
 
+#ifdef GSSAPI
+#define PBS_MAXUSER  256 /* max user name length, longer to accomodate kerberos identity */
+#else
 #define PBS_MAXUSER  32 /* max user name length */
+#error "Error when compiling GSSAPI!!!!"
+#endif
 #define PBS_MAXGRPN  16 /* max group name length */
 #define PBS_MAXGPUID 16 /* max gpu id length */
 #define PBS_MAXQUEUENAME 15 /* max queue name length */

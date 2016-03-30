@@ -119,7 +119,6 @@ Units: size.
 .IP walltime
 Maximum amount of real time during which the job can be in the running state.
 Units: time.
-.so pbs_resources_all.so
 .LP
 qsub \-l cput=1:00:00,walltime=2:00:00,file=50gb,mem=15mb script
 .br

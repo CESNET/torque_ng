@@ -414,21 +414,24 @@ int RPPReset(void);
 int rpp_get_stream_state(int index);
 
 /* tcp_dis.c */
-void DIS_tcp_settimeout(long timeout); 
+
 /* static void tcp_pack_buff(struct tcpdisbuf *tp); */
 int tcp_read(struct tcp_chan *chan, long long *read_len, long long *avail_len, unsigned int timeout);
-int DIS_tcp_wflush(struct tcp_chan *chan); 
 /* static void DIS_tcp_clear(struct tcpdisbuf *tp); */
-void DIS_tcp_reset(struct tcp_chan *chan, int i);
 int tcp_rskip(struct tcp_chan *chan, size_t ct);
 int tcp_getc(struct tcp_chan *chan);
-int tcp_gets(struct tcp_chan *chan, char *str, size_t ct);
-int tcp_puts(struct tcp_chan *chan, const char *str, size_t ct); 
-int tcp_rcommit(struct tcp_chan *chan, int commit_flag); 
-int tcp_wcommit(struct tcp_chan *chan, int commit_flag);
 int lock_all_channels();
 int unlock_all_channels(); 
+extern "C" {
+int tcp_rcommit(struct tcp_chan *chan, int commit_flag); 
+int tcp_wcommit(struct tcp_chan *chan, int commit_flag);
+int tcp_gets(struct tcp_chan *chan, char *str, size_t ct, unsigned int timeout);
+int tcp_puts(struct tcp_chan *chan, const char *str, size_t ct);
+int DIS_tcp_wflush(struct tcp_chan *chan); 
+void DIS_tcp_settimeout(long timeout); 
 struct tcp_chan * DIS_tcp_setup(int fd);
 void DIS_tcp_cleanup(struct tcp_chan *chan);
+void DIS_tcp_reset(struct tcp_chan *chan, int i);
+  }
 
 

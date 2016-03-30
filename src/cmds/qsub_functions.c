@@ -56,7 +56,7 @@
 #include "net_connect.h"
 #include "log.h"
 #include "port_forwarding.h"
-#include "common_cmds.h" 
+#include "common_cmds.h"
 #include "utils.h"
 #include "complete_req.hpp"
 #include "pbs_helper.h"
@@ -87,6 +87,13 @@ char *host_name_suffix = NULL;
 /* state booleans for protecting already-set options */
 int    J_opt = FALSE;
 int    P_opt = FALSE;
+
+#ifdef GSSAPI
+#include "pbsgss.h"
+extern int ignore_kerberos_for_connection;
+int    G_opt = FALSE;
+#endif
+
 
 const char   *checkpoint_strings = "n,c,s,u,none,shutdown,periodic,enabled,interval,depth,dir";
 complete_req  cr;
@@ -367,7 +374,7 @@ char *smart_strtok(
 
         ignchar = TRUE;
         }
-      else 
+      else
         {
         ignore = TRUE;
 
@@ -384,7 +391,7 @@ char *smart_strtok(
               /* delimiter is backslashed, ignore */
 
               ignore = FALSE;
-              
+
               sq_count--;
               }
             }
@@ -408,7 +415,7 @@ char *smart_strtok(
 
         ignchar = TRUE;
         }
-      else 
+      else
         {
         ignore = TRUE;
 
@@ -425,7 +432,7 @@ char *smart_strtok(
               /* delimiter is backslashed, ignore */
 
               ignore = FALSE;
-              
+
               dq_count--;
               }
             }
@@ -483,18 +490,18 @@ char *smart_strtok(
         /* delimiter found */
 
         *ptr = '\0';
-        
+
         ptr++;
-        
+
         if (head != NULL)
           {
           *ptrPtr = ptr;
 
           tmpLine[tindex] = '\0';
-          
+
           if (tindex > 0)
             strcpy(head,tmpLine);
-          
+
           free(tmpLine);
 
           return(head);
@@ -558,8 +565,8 @@ int get_name_value(
 
   if (curr_ptr == NULL)
     return(0);
-     
-  if ((*curr_ptr == '=') || 
+
+  if ((*curr_ptr == '=') ||
       (*curr_ptr == '\0'))
     {
     /* no name, fail */
@@ -1086,7 +1093,7 @@ void add_new_request_if_present(
     cr.toString(req_str);
     hash_add_or_exit(ji->job_attr, ATTR_req_information, req_str.c_str(), CMDLINE_DATA);
     }
-  } // END add_new_request_if_present() 
+  } // END add_new_request_if_present()
 
 
 
@@ -1516,7 +1523,7 @@ void do_dir(
  * will be connected to this socket.
  */
 char *interactive_port(
-    
+
   int *sock)
 
   {
@@ -2383,7 +2390,7 @@ int validate_group_list(
   char           *buf = NULL;
   char           *groups = strdup(glist);
   const char     *delims = ",";
-  char           *tmp_group = strtok(groups, delims); 
+  char           *tmp_group = strtok(groups, delims);
   char           *at;
   char           *u_name;
   char          **pmem;
@@ -2397,27 +2404,27 @@ int validate_group_list(
     }
 
   u_name = pwent->pw_name;
-  
+
   while (tmp_group != NULL)
     {
     if ((at = strchr(tmp_group,'@')) != NULL)
       *at = '\0';
-    
+
     if ((grent = getgrnam_ext(&buf, tmp_group)) == NULL)
       {
       free(groups);
       return(FALSE);
       }
-    
+
     pmem = grent->gr_mem;
     free_grname(grent, buf);
-    
+
     if (pmem == NULL)
       {
       free(groups);
       return(FALSE);
       }
-    
+
     while (*pmem != NULL)
       {
       if (!strcmp(*pmem,u_name))
@@ -2435,7 +2442,7 @@ int validate_group_list(
 
     tmp_group = strtok(NULL,delims);
     }
-      
+
   free(groups);
 
   return(TRUE);
@@ -2443,14 +2450,14 @@ int validate_group_list(
 
 
 bool came_from_moab(
-    
+
   const char  *src,
   std::string &escaped_semicolon)
 
   {
   char *p;
   if ((p = strstr((char *)src, "x=SID:Moab;")))
-    {  
+    {
     char  buf[1024];
     char *s;
 
@@ -2518,7 +2525,7 @@ void process_opt_L(
  * Verifies and adds the argument passed to -d
  * @param ji - where we store the job information
  * @param cmd_arg - the command line argument passed to qsub
- * @param data_type - the source of this argument 
+ * @param data_type - the source of this argument
  * @param tmp_job_info - the source for information parsed from torque.cfg
  * @return PBSE_NONE if good, -1 otherwise
  */
@@ -2552,7 +2559,7 @@ int process_opt_d(
             errno, strerror(errno));
         print_qsub_usage_exit(err_buf);
         }
-      
+
       std::string idir(mypwd);
       idir += "/";
       idir += cmd_arg;
@@ -2574,7 +2581,7 @@ int process_opt_d(
     }    /* END if (cmd_arg != NULL) */
 
   return(PBSE_NONE);
-  } // END process_opt_d() 
+  } // END process_opt_d()
 
 
 
@@ -2584,12 +2591,12 @@ int process_opt_d(
  * Verifies and adds the argument passed to -j
  * @param ji - where we store the job information
  * @param cmd_arg - the command line argument passed to qsub
- * @param data_type - the source of this argument 
+ * @param data_type - the source of this argument
  * @return PBSE_NONE if good, -1 otherwise
  */
 
 int process_opt_j(
-  
+
   job_info   *ji,
   const char *cmd_arg,
   int         data_type)
@@ -2606,7 +2613,7 @@ int process_opt_j(
   hash_add_or_exit(ji->job_attr, ATTR_j, cmd_arg, data_type);
 
   return(PBSE_NONE);
-  } // END process_opt_j() 
+  } // END process_opt_j()
 
 
 
@@ -2616,7 +2623,7 @@ int process_opt_j(
  * Verifies and adds the argument passed to -k
  * @param ji - where we store the job information
  * @param cmd_arg - the command line argument passed to qsub
- * @param data_type - the source of this argument 
+ * @param data_type - the source of this argument
  * @return PBSE_NONE if good, -1 otherwise
  */
 
@@ -2636,9 +2643,9 @@ int process_opt_k(
       (strcmp(cmd_arg, "eo") != 0) &&
       (strcmp(cmd_arg, "n") != 0))
     return(-1);
-  
+
   hash_add_or_exit(ji->job_attr, ATTR_k, cmd_arg, data_type);
-  
+
   return(PBSE_NONE);
   } // END process_opt_k()
 
@@ -2659,7 +2666,7 @@ int process_opt_K(
   // Must be a positive number
   if (delay < 1)
     return(-1);
-  
+
   hash_add_or_exit(ji->job_attr, ATTR_user_kill_delay, cmd_arg, data_type);
 
   return(PBSE_NONE);
@@ -2673,12 +2680,12 @@ int process_opt_K(
  * Verifies and adds the argument passed to -m
  * @param ji - where we store the job information
  * @param cmd_arg - the command line argument passed to qsub
- * @param data_type - the source of this argument 
+ * @param data_type - the source of this argument
  * @return PBSE_NONE if good, -1 otherwise
  */
 
 int process_opt_m(
-  
+
   job_info   *ji,
   const char *cmd_arg,
   int         data_type)
@@ -2689,14 +2696,14 @@ int process_opt_m(
 
   while (isspace((int)*cmd_arg))
     cmd_arg++;
-  
+
   if (strlen(cmd_arg) == 0)
     return(-1);
-  
+
   if (strcmp(cmd_arg, "n") != 0)
     {
     const char *pc = cmd_arg;
-    
+
     while (*pc)
       {
       if ((*pc != 'a') &&
@@ -2707,7 +2714,7 @@ int process_opt_m(
       pc++;
       }
     } /* END if (strcmp(cmd_arg,"n") != 0) */
-          
+
   hash_add_or_exit(ji->job_attr, ATTR_m, cmd_arg, data_type);
 
   return(PBSE_NONE);
@@ -2721,12 +2728,12 @@ int process_opt_m(
  * Verifies and adds the argument passed to -p
  * @param ji - where we store the job information
  * @param cmd_arg - the command line argument passed to qsub
- * @param data_type - the source of this argument 
+ * @param data_type - the source of this argument
  * @return PBSE_NONE if good, -1 otherwise
  */
 
 int process_opt_p(
-  
+
   job_info   *ji,
   const char *cmd_arg,
   int         data_type)
@@ -2737,30 +2744,30 @@ int process_opt_p(
 
   while (isspace((int)*cmd_arg))
     cmd_arg++;
-  
+
   const char *pc = cmd_arg;
-  
+
   if ((*pc == '-') ||
       (*pc == '+'))
     pc++;
-  
+
   if (strlen(pc) == 0)
     return(-1);
-  
+
   while (*pc != '\0')
     {
     if (!isdigit(*pc))
       return(-1);
-    
+
     pc++;
     }
-  
+
   int priority = strtol(cmd_arg, NULL, 10);
-  
+
   if ((priority < -1024) ||
       (priority > 1023))
     return(-1);
-  
+
   hash_add_or_exit(ji->job_attr, ATTR_p, cmd_arg, data_type);
 
   return(PBSE_NONE);
@@ -2768,14 +2775,14 @@ int process_opt_p(
 
 
 
-/** 
+/**
  * Process command line options.
  *
  * @see main() - parent
  *
- * NOTE:  return 0 on success 
- * NOTE:  only run submitfilter if pass < 10 
- */ 
+ * NOTE:  return 0 on success
+ * NOTE:  only run submitfilter if pass < 10
+ */
 
 void process_opts(
 
@@ -2821,7 +2828,7 @@ void process_opts(
   char        *err_msg = NULL;
   /* Moved from global to local */
   char         path_out[MAXPATHLEN + 1];
-  
+
   /* Note:
    * All other #ifdef's for PBS_NO_POSIX_VIOLATION are being removed because
    * the get_opts functionality will only process options in the list.
@@ -2969,10 +2976,17 @@ void process_opts(
 
 
       case 'f':
-      
+
         hash_add_or_exit(ji->job_attr, ATTR_f, "TRUE", data_type);
         break;
-      
+
+#ifdef GSSAPI
+      case 'G':
+
+        G_opt = TRUE;
+        break;
+#endif
+
       case 'h':
 
         hash_add_or_exit(ji->job_attr, ATTR_h, "u", data_type);
@@ -3009,7 +3023,7 @@ void process_opts(
         break;
 
       case 'K':
-        
+
         if (process_opt_K(ji, optarg, data_type) != PBSE_NONE)
           print_qsub_usage_exit("qsub: illegal -K value");
 
@@ -3083,10 +3097,10 @@ void process_opts(
         break;
 
       case 'p':
-        
+
         if (process_opt_p(ji, optarg, data_type) != PBSE_NONE)
           print_qsub_usage_exit("qsub: illegal -p value");
-        
+
         break;
 
       case 'P':
@@ -3261,8 +3275,8 @@ void process_opts(
             {
             int radix_value;
             int len;
-            
-              
+
+
               len = strlen(valuewd);
               if (len > MAX_RADIX_NUM_LEN)
                 print_qsub_usage_exit("qsub: illegal -W value for job_radix");
@@ -3271,7 +3285,7 @@ void process_opts(
                 if (!isdigit(valuewd[i])) /* verify the string is all digits */
                   break;
                 }
-              
+
               if (i == len) /* we parsed the whole valuewd string and it is a number */
                 {
                 radix_value = atoi(valuewd);
@@ -3287,10 +3301,10 @@ void process_opts(
             {
             if (parse_stage_list(valuewd))
               print_qsub_usage_exit("qsub: illegal -W value for stagein");
-            
+
             if (hash_find(ji->job_attr, ATTR_stagein, &tmp_job_info))
               {
-              /* 
+              /*
                * if this attribute already exists, we need to append this
                * value to it because multiples are allowed.
                */
@@ -3314,18 +3328,18 @@ void process_opts(
 
             }
           else if (!strcmp(keyword, ATTR_stageout))
-            {            
+            {
             if (parse_stage_list(valuewd))
               print_qsub_usage_exit("qsub: illegal -W value for stageout");
-            
+
             if (hash_find(ji->job_attr, ATTR_stageout, &tmp_job_info))
               {
-              /* 
+              /*
                * if this attribute already exists, we need to append this
                * value to it because multiples are allowed.
                */
               char *tmpBuf;
-              
+
               if ((tmpBuf = (char *)malloc(strlen(valuewd) + tmp_job_info->value.length() + 2)) == (char *)0)
                 {
                 fprintf(stderr, "Out of memory.\n");
@@ -3386,7 +3400,7 @@ void process_opts(
               snprintf(err_msg, alloc_len, "qsub: Invalid umask value, too many digits: %s", valuewd);
               print_qsub_usage_exit(err_msg);
               }
-            
+
             if (valuewd[0] == '0')
               {
               /* value is octal, convert to decimal */
@@ -3394,7 +3408,7 @@ void process_opts(
               char buf[4];
 
               mask = strtol(valuewd, NULL, 8);
-              snprintf(buf, 4, "%ld", mask); 
+              snprintf(buf, 4, "%ld", mask);
 
               /* value is octal, convert to decimal */
               hash_add_or_exit(ji->job_attr, ATTR_umask, buf, data_type);
@@ -3406,27 +3420,27 @@ void process_opts(
             {
             switch (valuewd[0])
               {
-            
+
               /*accept 1, TRUE,true,YES,yes, 0, FALSE, false, NO, no */
               case 1:
               case 'T':
               case 't':
               case 'Y':
               case 'y':
-                
+
                 hash_add_or_exit(ji->job_attr, ATTR_f, "TRUE", data_type);
-               
+
                 break;
-                
+
               case 0:
               case 'F':
               case 'f':
               case 'N':
               case 'n':
-                
+
                 hash_add_or_exit(ji->job_attr, ATTR_f, "FALSE", data_type);
                 break;
-              
+
               default:
                 alloc_len = 80 + strlen(ATTR_f) + strlen(valuewd);
                 calloc_or_fail(&err_msg, alloc_len, "-W attribute");
@@ -3482,7 +3496,7 @@ void process_opts(
         break;
 
       case 'x':
-      
+
         if (!(hash_find(ji->job_attr, ATTR_inter, &tmp_job_info)))
           {
           print_qsub_usage_exit("qsub: '-x' invalid on non-interactive job");
@@ -3498,7 +3512,7 @@ void process_opts(
           }
 
         break;
-        
+
 /* #endif */
 
       case 'z':
@@ -3526,7 +3540,7 @@ void process_opts(
       }
     }  /* END while ((c = getopt(argc,argv,GETOPT_ARGS)) != EOF) */
 
-  if ((J_opt == TRUE) && 
+  if ((J_opt == TRUE) &&
       (P_opt != TRUE))
     {
     print_qsub_usage_exit("The -J option can only be used in conjunction with -P");
@@ -3543,7 +3557,7 @@ void process_opts(
     /* Evaluate resources for interactive submission here. */
 
     /* Modified to reduce excess exit code */
-  
+
     if ((tmpfd = mkstemp(tmp_name)) < 1)
       rc = 1;
     else if ((fP = fdopen(tmpfd, "w+")) == NULL)
@@ -3591,7 +3605,7 @@ void process_opts(
           cline_out += "\"";
          }
         }    /* END for (index) */
-       
+
       cline_out += " <";
       cline_out += tmp_name;
       cline_out += " >";
@@ -3639,7 +3653,7 @@ void process_opts(
 
     /* evaluate the resources */
     /* If I'm not missing something, this can be optimized.
-     * In the case of a filter the results need to be read from the 
+     * In the case of a filter the results need to be read from the
      * resulting file.
      * However, if there is no filter, the results are read from a file that
      * written to the disk a bit earlier and never modified before read here.
@@ -3725,7 +3739,7 @@ void process_opts(
           break;
           }  /* END switch (cptr[0]) */
         }    /* END while (fgets(cline,sizeof(cline),fP) != NULL) */
-      
+
       fclose(fP);
       }
 
@@ -3747,7 +3761,7 @@ void process_opts(
  */
 
 void set_job_defaults(
-    
+
   job_info *ji)
 
   {
@@ -3767,7 +3781,7 @@ void set_job_defaults(
   /* rerunnable_by_default = true, if this changes later, that value will override this one */
   hash_add_or_exit(ji->job_attr, ATTR_r, "TRUE", STATIC_DATA);
   hash_add_or_exit(ji->job_attr, ATTR_f, "FALSE", STATIC_DATA);
-  
+
   hash_add_or_exit(ji->client_attr, "pbs_dprefix", "#PBS", STATIC_DATA);
   hash_add_or_exit(ji->job_attr, ATTR_job_radix, "0", STATIC_DATA);
   if (hash_find(ji->user_attr, "PBS_CLIENTRETRY", &tmp_job_info))
@@ -3821,7 +3835,7 @@ void update_job_env_names(job_info *ji)
 
 /* Process all config files options */
 void process_config_file(
-    
+
   job_info *ji)
 
   {
@@ -3933,13 +3947,17 @@ void print_qsub_usage_exit(const char *error_msg)
     [-e path] [-h] [-I] [-j oe|eo|n] [-k {oe}] [-K <kill delay seconds>] \n\
     [-l resource_list] [-m n|{abe}] [-M user_list] [-N jobname] [-o path] \n\
     [-p priority] [-P proxy_user [-J <jobid]] [-q queue] [-r y|n] \n\
-    [-S path] [-t number_to_submit] [-T type]  [-u user_list] [-w] path\n";
+    [-S path] [-t number_to_submit] [-T type]  [-u user_list] [-w] path "
+#ifdef GSSAPI
+  "[-G] "
+#endif
+  "\n";
 
   /* need secondary usage since there appears to be a 512 byte size limit */
 
   static char usage2[] =
     "    [-W additional_attributes] [-v variable_list] [-V ] [-x] [-X] [-z] [script]\n";
-    
+
   fprintf(stderr,"[%s]\n\n%s%s\n", error_msg, usage, usage2);
 
   exit(2);
@@ -4074,7 +4092,7 @@ void add_variable_list(
  * the user requested.
  */
 void process_early_opts(
-    
+
   int    argc,
   char **argv)
 
@@ -4154,12 +4172,12 @@ bool retry_submit_error(
     }
 
   return(true);
-  } // END retry_submit_error() 
+  } // END retry_submit_error()
 
 
 
-/** 
- * qsub main 
+/**
+ * qsub main
  *
  * @see process_opts() - child
  */
@@ -4202,7 +4220,7 @@ void main_func(
    * short-circuiting. If yes, then we'll exit without ever returning to main_func.
    */
   process_early_opts(argc, argv);
-  
+
   /* The order of precedence for processing options follows:
    * 1 - processing logic (includes submitfilter)
    * 2 - cmdline information
@@ -4353,13 +4371,13 @@ void main_func(
       print_qsub_usage_exit("qsub: opening script file:");
       }
     }    /* END else (!strcmp(script,"") || !strcmp(script,"-")) */
- 
+
   /* (2) cmdline options */
   process_opts(argc, argv, &ji, CMDLINE_DATA);
 
   if (((optind + 1) < argc) && (hash_find(ji.job_attr, ATTR_inter, &tmp_job_info) == FALSE))
     print_qsub_usage_exit("index issues");
-  
+
   post_check_attributes(&ji, script_tmp);
 
   add_new_request_if_present(&ji);
@@ -4379,7 +4397,7 @@ void main_func(
       {
       /* stuff this info into the job */
       hash_add_or_exit(ji.job_attr, ATTR_forwardx11, x11authstr, ENV_DATA);
-      
+
       if (debug)
         fprintf(stderr, "x11auth string: %s\n",
                 x11authstr);
@@ -4410,11 +4428,11 @@ void main_func(
     else
       {
       fprintf(stderr, "qsub:\tstandard input and output must be a terminal for \n\tinteractive job submission\n");
-      
+
       unlink(script_tmp);
-      
+
       close(inter_sock);
-      
+
       exit(1);
       }
     }
@@ -4430,9 +4448,9 @@ void main_func(
       {
       fprintf(stderr, "qsub: illegally formed destination: %s\n",
         tmp_job_info->value.c_str());
-  
+
       unlink(script_tmp);
-  
+
       exit(2);
       }
     destination = (char *)tmp_job_info->value.c_str();
@@ -4482,6 +4500,16 @@ void main_func(
       cnt2server_conf(tmpNum); /* set number of seconds to retry */
       }
     }
+
+#ifdef GSSAPI
+  if ((!G_opt) && (!pbsgss_can_get_creds()))
+    {
+    fprintf(stderr,"Kerberos credentials not found, but requested.\n");
+    exit(2);
+    }
+
+  ignore_kerberos_for_connection = G_opt;
+#endif
 
   sock_num = cnt2server(server_out);
 
@@ -4548,7 +4576,7 @@ void main_func(
                   &new_jobname,
                   &errmsg);
 
-    /* If we get a timeout the server is busy. Let the user 
+    /* If we get a timeout the server is busy. Let the user
        know what is taking so long */
     if (local_errno == PBSE_TIMEOUT)
       fprintf(stdout, "Connection to server timed out. Trying again");
@@ -4569,10 +4597,10 @@ void main_func(
       {
       errmsg = pbs_strerror(local_errno);
       }
-    
+
     if (errmsg != NULL)
       fprintf(stderr, "qsub: submit error (%s)\n", errmsg);
-    
+
     else
       fprintf(stderr, "qsub: Error (%d - %s) submitting job\n",
               local_errno, pbs_strerror(local_errno));

@@ -100,6 +100,7 @@ int get_batch_request_id(
 
   {
   int  id;
+  int rc;
   char buf[MAXLINE];
 
   brh.lock();
@@ -111,7 +112,8 @@ int get_batch_request_id(
   if ((preq->rq_id = strdup(buf)) == NULL)
     return(ENOMEM);
 
-  insert_batch_request(preq);
+  if ((rc = insert_batch_request(preq)) != PBSE_NONE)
+    return rc;
 
   return(PBSE_NONE);
   } /* END get_batch_request_id() */
@@ -158,7 +160,7 @@ batch_request *get_batch_request(
   brh.lock();
   preq = brh.find(br_id);
   brh.unlock();
-  
+
   return(preq);
   } /* END get_batch_request() */
 
@@ -185,7 +187,7 @@ batch_request *get_remove_batch_request(
     brh.remove(br_id);
     }
   brh.unlock();
-  
+
   return(preq);
   } /* END get_remove_batch_request() */
 

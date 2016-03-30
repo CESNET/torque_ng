@@ -99,7 +99,6 @@ Units: unitary.
 .IP walltime
 Maximum amount of real time during which the job can be in the running state.
 Units: time.
-.so pbs_resources_all.so
 .LP
 .if !\n(Pb .ig Ig
 .\" for ers only

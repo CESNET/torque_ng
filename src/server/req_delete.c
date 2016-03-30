@@ -179,7 +179,7 @@ extern void removeBeforeAnyDependencies(const char *pJobID);
  * delete_inactive_job
  *
  * job is not running (may have been running) and can be deleted
- * by pbs_server. 
+ * by pbs_server.
  *
  * @param pjob_ptr - a pointer to the job's pointer
  * @return PBSE_BAD_PARAMETER if pjob_ptr is NULL, PBSE_NONE otherwise
@@ -198,7 +198,7 @@ int delete_inactive_job(
     return(PBSE_BAD_PARAMETER);
 
   pjob = *pjob_ptr;
-  
+
   if ((pjob->ji_qs.ji_svrflags & JOB_SVFLG_CHECKPOINT_FILE) != 0)
     {
     /* job has restart file at mom, do end job processing */
@@ -237,13 +237,13 @@ int delete_inactive_job(
     if ((pque = get_jobs_queue(&pjob)) != NULL)
       {
       unlock_queue(pque, __func__, NULL, LOGLEVEL);
-      
+
       if (LOGLEVEL >= 7)
         {
         sprintf(log_buf, "calling on_job_exit from %s", __func__);
         log_event(PBSEVENT_JOB, PBS_EVENTCLASS_JOB, pjob->ji_qs.ji_jobid, log_buf);
         }
-    
+
       pthread_mutex_lock(server.sv_attr_mutex);
       KeepSeconds = attr_ifelse_long(
                     &pque->qu_attr[QE_ATR_KeepCompleted],
@@ -332,7 +332,7 @@ void force_purge_work(
 
   snprintf(log_buf, sizeof(log_buf), "purging job %s without checking MOM", pjob->ji_qs.ji_jobid);
   log_event(PBSEVENT_JOB,PBS_EVENTCLASS_JOB,pjob->ji_qs.ji_jobid,log_buf);
-  
+
   free_nodes(pjob);
 
   if ((pque = get_jobs_queue(&pjob)) != NULL)
@@ -348,7 +348,7 @@ void force_purge_work(
   depend_on_term(pjob);
 
   svr_setjobstate(pjob, JOB_STATE_COMPLETE, JOB_SUBSTATE_COMPLETE, FALSE);
-  
+
   if (pjob != NULL)
     {
     if (is_ms_on_server(pjob))
@@ -402,7 +402,7 @@ void setup_apply_job_delete_nanny(
   time_t  time_now)       /* I */
 
   {
-  long KeepSeconds = 0;  
+  long KeepSeconds = 0;
   int rc = get_svr_attr_l(SRV_ATR_KeepCompleted, &KeepSeconds);
 
   if ((rc != PBSE_NONE) || (KeepSeconds <= 0))
@@ -576,8 +576,8 @@ jump:
   if (force_cancel > 0)
     {
     char *dup_jobid = strdup(pjob->ji_qs.ji_jobid);
- 
-    set_task(WORK_Timed, time_now + force_cancel, ensure_deleted, dup_jobid, FALSE);    
+
+    set_task(WORK_Timed, time_now + force_cancel, ensure_deleted, dup_jobid, FALSE);
     }
 
   if (pjob->ji_qs.ji_state == JOB_STATE_RUNNING)
@@ -603,7 +603,10 @@ jump:
      * Send signal request to MOM.  The server will automagically
      * pick up and "finish" off the client request when MOM replies.
      */
-    get_batch_request_id(preq);
+    if ((rc = get_batch_request_id(preq)) != PBSE_NONE)
+      {
+      req_reject(rc,0,preq,NULL,NULL);
+      }
 
     if ((rc = issue_signal(&pjob, sigt, post_delete_mom1, strdup(del), strdup(preq->rq_id))))
       {
@@ -670,7 +673,7 @@ jump:
             continue;
 
           job_mutex.unlock();
-          
+
           if ((tmp = svr_find_job(pa->job_ids[i], FALSE)) == NULL)
             {
             free(pa->job_ids[i]);
@@ -792,7 +795,7 @@ int copy_attribute_list(
   svrattrl             *pal = (svrattrl *)GET_NEXT(preq->rq_ind.rq_manager.rq_attr);
   tlist_head           *phead = &preq_tmp->rq_ind.rq_manager.rq_attr;
   svrattrl             *newpal = NULL;
-  
+
   while (pal != NULL)
     {
     newpal = (svrattrl *)calloc(1, pal->al_tsize + 1);
@@ -803,7 +806,7 @@ int copy_attribute_list(
       }
 
     CLEAR_LINK(newpal->al_link);
-    
+
     newpal->al_atopl.next = 0;
     newpal->al_tsize = pal->al_tsize + 1;
     newpal->al_nameln = pal->al_nameln;
@@ -821,10 +824,10 @@ int copy_attribute_list(
     strcpy((char *)newpal->al_atopl.value, pal->al_atopl.value);
     newpal->al_valln = pal->al_valln;
     newpal->al_atopl.op = pal->al_atopl.op;
-    
+
     pal = (struct svrattrl *)GET_NEXT(pal->al_link);
     }
-  
+
   if ((phead != NULL) &&
       (newpal != NULL))
     append_link(phead, &newpal->al_link, newpal);
@@ -839,7 +842,7 @@ int copy_attribute_list(
  * duplicate_request()
  * duplicates preq and returns the duplicate request
  * @param preq - the request to duplicate
- * @param job_index - if desired, replace the job id with the sub job id. 
+ * @param job_index - if desired, replace the job id with the sub job id.
  * The sub-job has the index job_index and this is only performed if this
  * value isn't -1
  */
@@ -884,13 +887,13 @@ batch_request *duplicate_request(
     case PBS_BATCH_CheckpointJob:
     case PBS_BATCH_ModifyJob:
     case PBS_BATCH_AsyModifyJob:
-      
+
       /* based on how decode_DIS_Manage allocates data */
       CLEAR_HEAD(preq_tmp->rq_ind.rq_manager.rq_attr);
-      
+
       preq_tmp->rq_ind.rq_manager.rq_cmd = preq->rq_ind.rq_manager.rq_cmd;
       preq_tmp->rq_ind.rq_manager.rq_objtype = preq->rq_ind.rq_manager.rq_objtype;
-      
+
       if (job_index != -1)
         {
         /* If this is a job array it is possible we only have the array name
@@ -908,7 +911,7 @@ batch_request *duplicate_request(
             *ptr2 = 0;
             }
 
-          sprintf(preq_tmp->rq_ind.rq_manager.rq_objname,"%s%d%s", 
+          sprintf(preq_tmp->rq_ind.rq_manager.rq_objname,"%s%d%s",
             newjobname, job_index, ptr1);
           }
         else
@@ -918,7 +921,7 @@ batch_request *duplicate_request(
       /* copy the attribute list */
       if (copy_attribute_list(preq, preq_tmp) != PBSE_NONE)
         return(NULL);
-      
+
       break;
 
     case PBS_BATCH_SignalJob:
@@ -939,17 +942,17 @@ batch_request *duplicate_request(
 
     case PBS_BATCH_RunJob:
     case PBS_BATCH_AsyrunJob:
-  
+
       if (preq->rq_ind.rq_run.rq_destin)
         preq_tmp->rq_ind.rq_run.rq_destin = strdup(preq->rq_ind.rq_run.rq_destin);
 
       break;
-      
+
     default:
 
       break;
     }
-  
+
   return(preq_tmp);
   } /* END duplicate_request() */
 
@@ -976,7 +979,7 @@ void *delete_all_work(
   int            rc = PBSE_NONE;
   char           tmpLine[MAXLINE];
   char          *Msg = preq->rq_extend;
-  
+
   alljobs.lock();
   iter = alljobs.get_iterator();
   alljobs.unlock();
@@ -984,7 +987,7 @@ void *delete_all_work(
     {
     // use mutex manager to make sure job mutex locks are properly handled at exit
     mutex_mgr job_mutex(pjob->ji_mutex, true);
- 
+
     if ((rc = forced_jobpurge(pjob, preq_dup)) == PURGE_SUCCESS)
       {
       job_mutex.set_unlock_on_exit(false);
@@ -995,7 +998,7 @@ void *delete_all_work(
     if (pjob->ji_qs.ji_state >= JOB_STATE_EXITING)
       {
       job_mutex.unlock();
-      
+
       if(rc == -1)
         {
         //forced_jobpurge freed preq_dup so reallocate it.
@@ -1004,9 +1007,9 @@ void *delete_all_work(
         }
       continue;
       }
-    
+
     total_jobs++;
-    
+
     /* mutex is freed below */
     if (rc == PBSE_NONE)
       {
@@ -1016,7 +1019,7 @@ void *delete_all_work(
         job_mutex.set_unlock_on_exit(false);
         reply_ack(preq_dup);
         }
-       
+
       /* preq_dup has been freed at this point. Either reallocate it or set it to NULL*/
       if (rc == PURGE_SUCCESS)
         {
@@ -1026,13 +1029,13 @@ void *delete_all_work(
       else
         preq_dup = NULL;
       }
-    
+
     if (rc != PURGE_SUCCESS)
       {
       /* duplicate the preq so we don't have a problem with double frees */
       preq_dup = duplicate_request(preq);
       preq_dup->rq_noreply = TRUE;
-      
+
       if ((rc == MOM_DELETE) ||
           (rc == ROUTE_DELETE))
         failed_deletes++;
@@ -1040,14 +1043,14 @@ void *delete_all_work(
     }
 
   delete iter;
-  
+
   qdel_all_tracker.done_deleting_all(preq->rq_user, preq->rq_perm);
-  
+
   if (failed_deletes == 0)
     {
     reply_ack(preq);
 
-    /* PURGE SUCCESS means this was qdel -p all. In this case no reply_*() 
+    /* PURGE SUCCESS means this was qdel -p all. In this case no reply_*()
      * functions have been called */
     if (rc == PURGE_SUCCESS)
       {
@@ -1060,10 +1063,10 @@ void *delete_all_work(
     snprintf(tmpLine,sizeof(tmpLine),"Deletes failed for %d of %d jobs",
       failed_deletes,
       total_jobs);
-    
+
     req_reject(PBSE_SYSTEM, 0, preq, NULL, tmpLine);
     }
-    
+
   /* preq_dup happens at the end of the loop, so free the extra one if
    * it is there */
   if (preq_dup != NULL)
@@ -1121,7 +1124,7 @@ void *single_delete_work(
     /* mutex is freed below */
     if ((rc = forced_jobpurge(pjob, preq)) == PBSE_NONE)
       rc = execute_job_delete(pjob, Msg, preq);
- 
+
     if ((rc == PBSE_NONE) ||
         (rc == PURGE_SUCCESS))
       reply_ack(preq);
@@ -1144,7 +1147,7 @@ int handle_single_delete(
   if (pjob == NULL)
     {
     log_event(PBSEVENT_DEBUG,PBS_EVENTCLASS_JOB,jobid,pbse_to_txt(PBSE_UNKJOBID));
-    
+
     req_reject(PBSE_UNKJOBID, 0, preq, NULL, "cannot locate job");
     }
   else
@@ -1222,13 +1225,13 @@ int req_deletejob(
   char                  log_buf[LOCAL_LOG_BUF_SIZE];
 
   /* check if we are getting a purgecomplete from scheduler */
-  if (preq->rq_extend != NULL)  
+  if (preq->rq_extend != NULL)
     {
     if (!strncmp(preq->rq_extend,PURGECOMP,strlen(PURGECOMP)))
       {
       /* purge_completed_jobs will respond with either an ack or reject */
       purge_completed_jobs(preq);
-      
+
       return(PBSE_NONE);
       }
     else if ((strncmp(preq->rq_extend, deldelaystr, strlen(deldelaystr))) &&
@@ -1300,14 +1303,14 @@ void change_restart_comment_if_needed(
     char *ptr;
 
     snprintf(commentMsg, sizeof(commentMsg), "%s", pjob->ji_wattr[JOB_ATR_checkpoint_restart_status].at_val.at_str);
-   
+
     comment_ptr = commentMsg;
     token1 = threadsafe_tokenizer(&comment_ptr, " ");
     if (token1 != NULL)
       token2 = threadsafe_tokenizer(&comment_ptr, " ");
-    
-    if ((token2 != NULL) && 
-        ((memcmp(token2,"failure",7) == 0) || 
+
+    if ((token2 != NULL) &&
+        ((memcmp(token2,"failure",7) == 0) ||
          (memcmp(token2,"restarted",9) == 0)))
       {
       ptr = pjob->ji_wattr[JOB_ATR_checkpoint_restart_status].at_val.at_str;
@@ -1319,12 +1322,12 @@ void change_restart_comment_if_needed(
         }
       }
     }
-  
+
   return;
   } /* change_restart_comment_if_needed() */
 
 
- 
+
 
 
 /*
@@ -1493,7 +1496,7 @@ void post_delete_mom2(
   jobid = (char *)pwt->wt_parm1;
   free(pwt->wt_mutex);
   free(pwt);
-  
+
   if (jobid == NULL)
     {
     log_err(ENOMEM, __func__, "Cannot allocate memory");
@@ -1510,14 +1513,14 @@ void post_delete_mom2(
     if (pjob->ji_qs.ji_state == JOB_STATE_RUNNING)
       {
       issue_signal(&pjob, sigk, free_br, NULL, NULL);
-      
+
       if (pjob != NULL)
         {
         sprintf(log_buf, msg_delrunjobsig, sigk);
         log_event(PBSEVENT_JOB,PBS_EVENTCLASS_JOB,pjob->ji_qs.ji_jobid,log_buf);
         }
       }
-    
+
     if (pjob == NULL)
       job_mutex.set_unlock_on_exit(false);
     }
@@ -1541,7 +1544,7 @@ int forced_jobpurge(
 
   {
   long owner_purge = FALSE;
-  
+
   /* check about possibly purging the job */
   if (preq->rq_extend != NULL)
     {
@@ -1664,27 +1667,27 @@ void job_delete_nanny(
   if (nanny)
     {
     jobid = (char *)pwt->wt_parm1;
-    
+
     if (jobid != NULL)
       {
       pjob = svr_find_job(jobid, FALSE);
-      
+
       if (pjob != NULL)
         {
         mutex_mgr job_mutex(pjob->ji_mutex, true);
 
         sprintf(log_buf, "exiting job '%s' still exists, sending a SIGKILL", pjob->ji_qs.ji_jobid);
         log_err(-1, "job nanny", log_buf);
-        
+
         /* build up a Signal Job batch request */
         if ((newreq = alloc_br(PBS_BATCH_SignalJob)) != NULL)
           {
           strcpy(newreq->rq_ind.rq_signal.rq_jid, pjob->ji_qs.ji_jobid);
           snprintf(newreq->rq_ind.rq_signal.rq_signame, sizeof(newreq->rq_ind.rq_signal.rq_signame), "%s", sigk);
           }
-        
+
         issue_signal(&pjob, sigk, post_job_delete_nanny, newreq, NULL);
-        
+
         if (pjob != NULL)
           apply_job_delete_nanny(pjob, time_now + 60);
         else
@@ -1696,7 +1699,7 @@ void job_delete_nanny(
       log_err(ENOMEM, __func__, "Cannot allocate memory");
       }
     }
-  
+
   if (pwt->wt_parm1 != NULL)
     free(pwt->wt_parm1);
 
@@ -1725,7 +1728,7 @@ void post_job_delete_nanny(
   char                  log_buf[LOCAL_LOG_BUF_SIZE];
   long                  nanny = 0;
 
-  if (preq_sig == NULL)    
+  if (preq_sig == NULL)
     return;
 
   rc       = preq_sig->rq_reply.brp_code;
@@ -1754,7 +1757,7 @@ void post_job_delete_nanny(
     }
 
   mutex_mgr job_mutex(pjob->ji_mutex, true);
-  
+
   if (rc == PBSE_UNKJOBID)
     {
     sprintf(log_buf, "job delete nanny returned, but does not exist on mom");
@@ -1764,7 +1767,7 @@ void post_job_delete_nanny(
     free_nodes(pjob);
 
     set_resc_assigned(pjob, DECR);
-  
+
     free_br(preq_sig);
 
     job_mutex.set_unlock_on_exit(false);
@@ -1803,7 +1806,7 @@ void purge_completed_jobs(
   time_str = preq->rq_extend;
   time_str += strlen(PURGECOMP);
   purge_time = strtol(time_str,NULL,10);
-  
+
   /*
     * Clean unreported capability is only for operators and managers.
     * Check if request is authorized
@@ -1824,7 +1827,7 @@ void purge_completed_jobs(
 
     log_event(PBSEVENT_SYSTEM, PBS_EVENTCLASS_REQUEST, __func__, log_buf);
     }
-    
+
   reply_ack(preq);
 
   alljobs.lock();
@@ -1842,14 +1845,14 @@ void purge_completed_jobs(
         {
         sprintf(log_buf,"Reported job is COMPLETED (%ld), setting reported to TRUE",
           pjob->ji_wattr[JOB_ATR_comp_time].at_val.at_long);
-        
+
         log_event(PBSEVENT_JOB,PBS_EVENTCLASS_JOB,pjob->ji_qs.ji_jobid,log_buf);
         }
-      
+
       pjob->ji_wattr[JOB_ATR_reported].at_val.at_long = 1;
       pjob->ji_wattr[JOB_ATR_reported].at_flags = ATR_VFLAG_SET | ATR_VFLAG_MODIFY;
-          
-      job_save(pjob, SAVEJOB_FULL, 0); 
+
+      job_save(pjob, SAVEJOB_FULL, 0);
       }
 
     unlock_ji_mutex(pjob, __func__, "1", LOGLEVEL);
@@ -1866,7 +1869,7 @@ void purge_completed_jobs(
  */
 
 int is_ms_on_server(
-    
+
   const job *pjob)
 
   {

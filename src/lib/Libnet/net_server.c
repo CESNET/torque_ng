@@ -216,7 +216,7 @@ int get_num_connections()
 
 
 void netcounter_get(
-    
+
   int netrates[])
 
   {
@@ -314,7 +314,7 @@ int init_network(
           net_server_name = strdup(namebuf);
           }
 
-        net_serveraddr = ((struct sockaddr_in *)addr_info->ai_addr)->sin_addr; 
+        net_serveraddr = ((struct sockaddr_in *)addr_info->ai_addr)->sin_addr;
         }
 
       if (net_server_name == NULL)
@@ -328,12 +328,12 @@ int init_network(
       svr_conn[i].cn_mutex = (pthread_mutex_t *)calloc(1, sizeof(pthread_mutex_t));
       pthread_mutex_init(svr_conn[i].cn_mutex,NULL);
       pthread_mutex_lock(svr_conn[i].cn_mutex);
-      
+
       svr_conn[i].cn_active = Idle;
-      
+
       pthread_mutex_unlock(svr_conn[i].cn_mutex);
       }
-    
+
     /* initialize global "read" socket FD bitmap */
     GlobalSocketReadSet = (fd_set *)calloc(1,sizeof(char) * get_fdset_size());
     GlobalSocketAddrSet = (u_long *)calloc(sizeof(ulong),get_max_num_descriptors());
@@ -344,7 +344,7 @@ int init_network(
 
     num_connections_mutex = (pthread_mutex_t *)calloc(1, sizeof(pthread_mutex_t));
     pthread_mutex_init(num_connections_mutex,&t_attr);
-    
+
     type = Primary;
     }
   else if (initialized == 1)
@@ -426,7 +426,7 @@ int init_network(
 
     unsocname.sun_family = AF_UNIX;
 
-    strncpy(unsocname.sun_path, TSOCK_PATH, sizeof(unsocname.sun_path) - 1);  
+    strncpy(unsocname.sun_path, TSOCK_PATH, sizeof(unsocname.sun_path) - 1);
 
     unlink(TSOCK_PATH);  /* don't care if this fails */
 
@@ -475,7 +475,7 @@ int init_network(
   return(PBSE_NONE);
   }  /* END init_network() */
 
-/* ping_trqauthd - Send a "ping" request to trqauthd to see 
+/* ping_trqauthd - Send a "ping" request to trqauthd to see
    if it is up.
 
 RETURN:
@@ -484,7 +484,7 @@ RETURN:
  */
 
 int ping_trqauthd(
-    
+
   const char *unix_socket_name)
 
   {
@@ -553,7 +553,7 @@ int ping_trqauthd(
  */
 
 int check_trqauthd_unix_domain_port(
-    
+
   const char *unix_socket_name)
 
   {
@@ -574,7 +574,7 @@ int check_trqauthd_unix_domain_port(
 
     /* trqauthd is no listening. Remove the domain socket file */
     unlink(unix_socket_name);
-    
+
     }
 
   /* trqauthd unix domain socket not found. trqauthd not started */
@@ -682,13 +682,13 @@ int wait_request(
 
   SelectSetSize = sizeof(char) * get_fdset_size();
   SelectSet = (fd_set *)calloc(1,SelectSetSize);
-  
+
   if(SelectSet == NULL)
     {
     return(-1);
     }
   pthread_mutex_lock(global_sock_read_mutex);
-  
+
   memcpy(SelectSet,GlobalSocketReadSet,SelectSetSize);
 
   /* selset = readset;*/  /* readset is global */
@@ -780,7 +780,7 @@ int wait_request(
 
         /* NOTE:  breakout if state changed (probably received shutdown request) */
 
-        if ((SState != NULL) && 
+        if ((SState != NULL) &&
             (OrigState != *SState))
           break;
         }
@@ -834,14 +834,14 @@ int wait_request(
     if ((now - cp->cn_lasttime) <= PBS_NET_MAXCONNECTIDLE)
       {
       pthread_mutex_unlock(svr_conn[i].cn_mutex);
-  
+
       continue;
       }
 
     if (cp->cn_authen & PBS_NET_CONN_NOTIMEOUT)
       {
       pthread_mutex_unlock(svr_conn[i].cn_mutex);
-  
+
       continue; /* do not time-out this connection */
       }
 
@@ -855,7 +855,7 @@ int wait_request(
       netaddr_long(cp->cn_addr, buf),
       PBS_NET_MAXCONNECTIDLE);
     }
-    
+
     log_err(-1, __func__, tmpLine);
 
     /* locate node associated with interface, mark node as down until node responds */
@@ -882,7 +882,7 @@ int wait_request(
  * structure - the processing routine is set to the external
  * function: process_request(socket)
  *
- * NOTE: accept conn is called by functions that have a mutex on the socket already 
+ * NOTE: accept conn is called by functions that have a mutex on the socket already
  */
 
 void *accept_conn(
@@ -970,7 +970,7 @@ void globalset_add_sock(
 
 
 
- 
+
 void globalset_del_sock(
 
   int sock)
@@ -1147,7 +1147,7 @@ void close_conn(
   /* close conn shouldn't be called on local connections */
   if (sd == PBS_LOCAL_CONNECTION)
     return;
-  
+
   if ((sd < 0) ||
       (max_connection <= sd))
     {
@@ -1180,7 +1180,7 @@ void close_conn(
     svr_conn[sd].cn_oncl(sd);
     }
 
-  /* 
+  /*
    * In the case of a -t cold start, this will be called prior to
    * GlobalSocketReadSet being initialized
    */
@@ -1198,7 +1198,11 @@ void close_conn(
   svr_conn[sd].cn_func = (void *(*)(void *))0;
   svr_conn[sd].cn_authen = 0;
   svr_conn[sd].cn_stay_open = FALSE;
-    
+#ifdef GSSAPI
+  free(svr_conn[sd].principal);
+  svr_conn[sd].principal = NULL;
+#endif
+
   if (has_mutex == FALSE)
     pthread_mutex_unlock(svr_conn[sd].cn_mutex);
 
@@ -1211,7 +1215,7 @@ void close_conn(
 
 
 /*
- * clear_conn is used to reset the connection table for 
+ * clear_conn is used to reset the connection table for
  * a socket that has been already closed by pbs_disconnect
  * but the socket was added to the svr_conn table with add_conn
  * or some other method. This is the case for the socket
@@ -1229,7 +1233,7 @@ void clear_conn(
   /* close conn shouldn't be called on local connections */
   if (sd == PBS_LOCAL_CONNECTION)
     return;
-  
+
   if ((sd < 0) ||
       (max_connection <= sd))
     {
@@ -1250,7 +1254,7 @@ void clear_conn(
     return;
     }
 
-  /* 
+  /*
    * In the case of a -t cold start, this will be called prior to
    * GlobalSocketReadSet being initialized
    */
@@ -1266,7 +1270,7 @@ void clear_conn(
   svr_conn[sd].cn_func = (void *(*)(void *))0;
   svr_conn[sd].cn_authen = 0;
   svr_conn[sd].cn_stay_open = FALSE;
-    
+
   if (has_mutex == FALSE)
     pthread_mutex_unlock(svr_conn[sd].cn_mutex);
 
@@ -1347,14 +1351,14 @@ pbs_net_t get_connectaddr(
 
 
 void set_localhost_name(
-    
+
   char   *localhost_name,
   size_t  len)
 
   {
   struct sockaddr sa;
   int             rc;
- 
+
   memset(&sa, 0, sizeof(struct sockaddr));
 
   sa.sa_family = AF_INET;

@@ -113,9 +113,17 @@ int get_protocol_type(
     timeout = pbs_tcp_timeout;
 
   protocol_type = disrui_peek(chan, &rc, timeout);
-
-  if (chan->IsTimeout)
+  if (getenv("PBSDEBUG") != NULL)
     {
+    fprintf(stderr,"Protocol type read: %d\n",protocol_type);
+    }
+
+  if (chan->IsTimeout == 1)
+    {
+    if (getenv("PBSDEBUG") != NULL)
+      {
+      fprintf(stderr,"Error, timeout, re-reading protocol.\n");
+      }
     // If we aren't too busy try again. If we are too busy just move on so we
     // don't completely jam ourselves.
     if ((timeout < pbs_tcp_timeout) &&
@@ -123,52 +131,54 @@ int get_protocol_type(
       {
       chan->IsTimeout = 0;
       protocol_type = disrui_peek(chan, &rc, pbs_tcp_timeout - SHORT_TIMEOUT);
+      if (getenv("PBSDEBUG") != NULL)
+        {
+        fprintf(stderr,"New protocol type: %d\n",protocol_type);
+        }
       }
     }
 
   return(protocol_type);
   } /* END get_protocol_type() */
 
-
-
 int process_pbs_server_port(
-     
+
   int   sock,
   int   is_scheduler_port,
   long *args)
- 
+
   {
   int              protocol_type;
   int              rc = PBSE_NONE;
   char             log_buf[LOCAL_LOG_BUF_SIZE];
   struct tcp_chan *chan = NULL;
-   
+
   if ((chan = DIS_tcp_setup(sock)) == NULL)
     {
     return(PBSE_MEM_MALLOC);
     }
 
   protocol_type = get_protocol_type(chan, rc);
-  
+
   switch (protocol_type)
     {
     case PBS_BATCH_PROT_TYPE:
-      
+
       rc = process_request(chan);
-      
+
       break;
-      
+
     case IS_PROTOCOL:
 
       {
-      // always close the socket for is requests 
+      // always close the socket for is requests
       rc = PBSE_SOCKET_CLOSE;
 
       is_request_info isr;
 
       isr.chan = chan;
       isr.args = args;
-  
+
       if (threadpool_is_too_busy(request_pool, ATR_DFLAG_MGRD) == false)
         svr_is_request(&isr);
       else
@@ -179,7 +189,7 @@ int process_pbs_server_port(
 
       // don't let this get cleaned up below
       chan = NULL;
-      
+
       break;
       }
 
@@ -192,10 +202,10 @@ int process_pbs_server_port(
       if (getpeername(sock, &s_addr, &len) == 0)
         {
         addr = (struct sockaddr_in *)&s_addr;
-        
+
         if (protocol_type == 0)
           {
-          /* 
+          /*
            * Don't log error if close is on scheduler port.  Scheduler is
            * responsible for closing the connection
            */
@@ -242,14 +252,14 @@ int process_pbs_server_port(
 
 
 void *start_process_pbs_server_port(
-    
+
   void *new_sock)
 
   {
   long *args = (long *)new_sock;
   int sock;
   int rc = PBSE_NONE;
- 
+
   sock = (int)args[0];
 
   while ((rc != PBSE_SOCKET_DATA) &&

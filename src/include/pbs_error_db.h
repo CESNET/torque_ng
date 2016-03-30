@@ -295,6 +295,11 @@ PbsErrClient(PBSE_GHOSTQUEUE, (char *)"This queue had errors during its recovery
 PbsErrClient(PBSE_CGROUP_CREATE_FAIL, (char *)"Could not create all of the cgroups for this job.")
 PbsErrClient(PBSE_GPU_NOT_INITIALIZED, (char *)"NVIDIA GPU not initialized")
 PbsErrClient(PBSE_UNSUPPORTED_DEVICE_VERSION, (char *)"Unsupported device version")
+#ifdef GSSAPI
+PbsErrClient(PBSE_GSSENCODE, (char *)"Could not initialize kerberos connection.")
+PbsErrClient(PBSE_GSSAUTH, (char*)"Cannot authenticate user using kerberos.")
+PbsErrClient(PBSE_GSSACL, (char*)"Access for user not allowed based on kerberos ACL.")
+#endif
 /* pbs client errors ceiling (max_client_err + 1) */
 PbsErrClient(PBSE_CEILING,           (char*)0)
 #endif

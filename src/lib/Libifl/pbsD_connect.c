@@ -126,9 +126,14 @@
 #include "pbs_constants.h" /* LOCAL_IP */
 #include "net_cache.h"
 
+#ifdef GSSAPI
+#include "pbsgss.h"
+int ignore_kerberos_for_connection = 0;
+#endif
+
 #define LOCAL_LOG_BUF 1024
 #define CNTRETRYDELAY 5
-#define MUNGE_SIZE 256 /* I do not know what the proper size of this should be. My 
+#define MUNGE_SIZE 256 /* I do not know what the proper size of this should be. My
                           testing with munge shows it creates a string of 128 bytes */
 #define MAX_RETRIES 3  /* maximum number of times to try and successfully connect in pbs_original_connect */
 
@@ -220,7 +225,7 @@ char *pbs_get_server_list(void)
         {
         local_server_list += ",";
         local_server_list += tmp;
-      
+
         if ((pos = local_server_list.find("\n")) != std::string::npos)
           local_server_list.erase(pos);
         }
@@ -379,8 +384,8 @@ char *PBS_get_server(
 
 
 /*
- * PBSD_munge_authenticate - This function will use munge to authenticate 
- * a user connection with the server. 
+ * PBSD_munge_authenticate - This function will use munge to authenticate
+ * a user connection with the server.
  */
 #if defined(MUNGE_AUTH) && defined(MUNGE_AUTH_EXEC)
 int PBSD_munge_authenticate(
@@ -399,7 +404,7 @@ int PBSD_munge_authenticate(
   int                 bytes_read;
   int                 total_bytes_read = 0;
   int                 local_errno = 0;
-  
+
   /* user id and name stuff */
   struct passwd      *pwent;
   uid_t               myrealuid;
@@ -413,7 +418,7 @@ int PBSD_munge_authenticate(
     "munge -n 2>/dev/null");
 
   memset(munge_buf, 0, MUNGE_SIZE);
-  ptr = munge_buf; 
+  ptr = munge_buf;
 
   if ((munge_pipe = popen(munge_command,"r")) == NULL)
     {
@@ -438,7 +443,7 @@ int PBSD_munge_authenticate(
     log_err(local_errno, __func__, "error reading pipe in PBSD_munge_authenticate");
     return -1;
     }
-  
+
   /* if we got no bytes back then Munge may not be installed etc. */
   if (total_bytes_read == 0)
     {
@@ -446,19 +451,19 @@ int PBSD_munge_authenticate(
     }
 
   /* We got the certificate. Now make the PBS_BATCH_AltAuthenUser request */
-  myrealuid = getuid();  
+  myrealuid = getuid();
   pwent = getpwuid(myrealuid);
-  
+
   rc = getsockname(psock, (struct sockaddr *)&sockname, &socknamelen);
-  
+
   if (rc == -1)
     {
     fprintf(stderr, "getsockname failed: %d\n", errno);
     return rc;
     }
-  
+
   user_port = ntohs(sockname.sin_port);
-  
+
   if ((chan = DIS_tcp_setup(psock)) == NULL)
     {
     rc = PBSE_MEM_MALLOC;
@@ -488,8 +493,8 @@ int PBSD_munge_authenticate(
 
 
 /* MUNGE library supported authentication
- * PBSD_munge_authenticate - This function will use munge to authenticate 
- * a user connection with the server. 
+ * PBSD_munge_authenticate - This function will use munge to authenticate
+ * a user connection with the server.
  */
 #if defined(MUNGE_AUTH) && defined(MUNGE_AUTH_LIB)
 int PBSD_munge_cred_destroy(
@@ -499,7 +504,7 @@ int PBSD_munge_cred_destroy(
   {
   char *ptr = NULL;
 
-  if ((cred == NULL) || 
+  if ((cred == NULL) ||
       (*cred == NULL))
     return (-1);
 
@@ -562,23 +567,23 @@ int PBSD_munge_authenticate(
     munge_ctx_destroy(mctx);
     return(PBSE_MUNGE_NOT_FOUND); /*TODO more fine-grained error codes? */
     }
-  
+
   munge_ctx_destroy(mctx);
 
   /* We got the certificate. Now make the PBS_BATCH_AltAuthenUser request */
   myrealuid = getuid();
   pwent = getpwuid(myrealuid);
-  
+
   rc = getsockname(psock, (struct sockaddr *)&sockname, &socknamelen);
-  
+
   if (rc == -1)
     {
     fprintf(stderr, "getsockname failed: %d\n", errno);
     return(-1);
     }
-  
+
   user_port = ntohs(sockname.sin_port);
-  
+
   if ((chan = DIS_tcp_setup(psock)) == NULL)
     {
     }
@@ -599,7 +604,7 @@ int PBSD_munge_authenticate(
     /* read the reply */
     if ((reply = PBSD_rdrpy(&local_err, handle)) != NULL)
       free(reply);
-    
+
     return(PBSE_NONE);
     }
 
@@ -814,7 +819,7 @@ ssize_t    send_unix_creds(int sd)
 
 /*
  * Set a preferred outbound interface for communication
- * 
+ *
  * The current solution uses a Linux ioctl call to
  * find the named interfaces address. We will need
  * to conditionally compile this for other platforms
@@ -824,7 +829,7 @@ ssize_t    send_unix_creds(int sd)
 #define MAX_IFS 64
 
 int trq_set_preferred_network_interface(
-    
+
   char            *if_name,
   struct sockaddr *preferred_addr)
 
@@ -839,7 +844,7 @@ int trq_set_preferred_network_interface(
 	/* make sure we have a valid name for the interface */
   if ((if_name == NULL) ||
       (preferred_addr == NULL))
-		return(PBSE_IVALREQ);	
+		return(PBSE_IVALREQ);
 
   memset(preferred_addr, 0, sizeof(struct sockaddr));
 
@@ -924,6 +929,10 @@ int pbs_original_connect(
 
   char               *ptr;
 
+#ifdef GSSAPI
+  int needauth = 0;
+#endif
+
   memset(&server_addr, 0, sizeof(server_addr));
 
   /* Read the timeout from the environment */
@@ -957,7 +966,7 @@ int pbs_original_connect(
     if (connection[i].ch_inuse == FALSE)
       {
       out = i;
-      
+
       connection[out].ch_inuse  = TRUE;
       connection[out].ch_errno  = 0;
       connection[out].ch_socket = -1;
@@ -1263,7 +1272,7 @@ int pbs_original_connect(
           continue;
           }
         }
-      
+
       sockflags |= O_NONBLOCK;
 
       if ((rc = fcntl(connection[out].ch_socket, F_SETFL, sockflags)) < 0)
@@ -1314,7 +1323,7 @@ int pbs_original_connect(
       // if we are at this point, connect has succeeded, proceed to authorize
       /* Set the socket back to blocking so read()s actually work */
       sockflags &= (~O_NONBLOCK);
-      
+
       if ((rc = fcntl(connection[out].ch_socket, F_SETFL, sockflags)) < 0)
         {
         if (getenv("PBSDEBUG"))
@@ -1330,7 +1339,7 @@ int pbs_original_connect(
           {
           close(connection[out].ch_socket);
           connection[out].ch_inuse = FALSE;
-          
+
           usleep(1000);
           continue;
           }
@@ -1346,6 +1355,48 @@ int pbs_original_connect(
 #endif
 #endif
 
+#ifdef GSSAPI
+  /* If we have GSSAPI, then try gssapi authentication first.  If that fails, fall back to iff.
+     If there's no GSSAPI, then just use iff.
+  */
+
+  if (!getenv("TORQUE_IGNORE_KERBEROS") &&
+      !ignore_kerberos_for_connection &&
+      pbsgss_can_get_creds())
+    {
+    tcp_chan *chan = DIS_tcp_setup(connection[out].ch_socket);
+    if (encode_DIS_ReqHdr(chan, PBS_BATCH_GSSAuthenUser, pbs_current_user) ||
+        encode_DIS_ReqExtend(chan,0))
+      {
+      if (getenv("PBSDEBUG"))
+        {
+        fprintf(stderr,"ERROR:  cannot authenticate connection with gssapi, errno=%d (%s)\n", errno, strerror(errno));
+        }
+      needauth = 1;
+      }
+    else
+      {
+      DIS_tcp_wflush(chan);
+      if (pbsgss_client_authenticate(server,chan,1,1) != 0)
+        {
+        needauth = 1;
+        if (getenv("PBSDEBUG"))
+          {
+          fprintf(stderr,"ERROR:  cannot authenticate connection, errno=%d (%s)\n", errno, strerror(errno));
+          }
+        }
+      }
+    DIS_tcp_cleanup(chan);
+    }
+  else
+    {
+    needauth = 1;
+    }
+
+  if (needauth)
+    {
+#endif
+
 #ifdef MUNGE_AUTH
       rc = PBSD_munge_authenticate(connection[out].ch_socket, out);
       if (rc != 0)
@@ -1354,7 +1405,7 @@ int pbs_original_connect(
         if (rc == PBSE_MUNGE_NOT_FOUND)
           {
           local_errno = PBSE_MUNGE_NOT_FOUND;
-          
+
           if (getenv("PBSDEBUG"))
             {
             fprintf(stderr, "ERROR:  cannot find munge executable\n");
@@ -1369,7 +1420,7 @@ int pbs_original_connect(
           if (!retry || retries >= MAX_RETRIES)
             {
             local_errno = PBSE_PERM;
-            
+
             if (getenv("PBSDEBUG"))
               {
               fprintf(stderr, "ERROR:  cannot authenticate connection to server \"%s\", errno=%d (%s)\n",
@@ -1377,7 +1428,7 @@ int pbs_original_connect(
                 errno,
                 strerror(errno));
               }
-            
+
             rc = -1 * local_errno;
             goto cleanup_conn;
             }
@@ -1385,13 +1436,13 @@ int pbs_original_connect(
             {
             close(connection[out].ch_socket);
             connection[out].ch_inuse = FALSE;
-            
+
             usleep(1000);
             continue;
             }
           }
         }
-#else  
+#else
       /* new version of iff using daemon */
       if ((ENABLE_TRUSTED_AUTH == FALSE) &&
           ((rc = validate_socket(connection[out].ch_socket, err_msg)) != PBSE_NONE))
@@ -1405,7 +1456,7 @@ int pbs_original_connect(
             if (rc > 0)
               tmp_err_msg = pbs_strerror(rc);
 
-            fprintf(stderr, 
+            fprintf(stderr,
               "ERROR:  cannot authenticate connection to server \"%s\", errno=%d (%s)\n",
               server, rc, tmp_err_msg);
             }
@@ -1424,7 +1475,11 @@ int pbs_original_connect(
           continue;
           }
         }
+
 #endif /* ifdef MUNGE_AUTH */
+#ifdef GSSAPI
+        }
+#endif
       } while ((rc != PBSE_NONE) && (retries < MAX_RETRIES));
 
     if (rc != PBSE_NONE)
@@ -1439,7 +1494,7 @@ int pbs_original_connect(
   return(out);
 
 cleanup_conn:
-  
+
   if (connection[out].ch_socket >= 0)
     close(connection[out].ch_socket);
 
@@ -1533,7 +1588,7 @@ int pbs_disconnect(
 
 
 void print_server_port_to_stderr(
-    
+
   char *s_name)
 
   {
@@ -1550,7 +1605,7 @@ void print_server_port_to_stderr(
     ip_addr = inet_ntoa(hostaddr);
     fprintf(stderr, "Unable to communicate with %s(%s)\n", s_name, ip_addr);
     }
-  else  
+  else
     {
     const char *err_msg = "";
 
@@ -1576,7 +1631,7 @@ void print_server_port_to_stderr(
  */
 
 int pbs_connect(
-    
+
   char *server_name_ptr)    /* I (optional) */
 
   {
@@ -1647,7 +1702,7 @@ int pbs_connect(
  * @returns A file descriptor number.
  */
 int pbs_connect_with_retry(
-    
+
   char *server_name_ptr, /* I */
   int   retry_seconds)   /* I */
 

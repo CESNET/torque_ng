@@ -107,7 +107,7 @@
 #endif
 
 #define MAX_SOCKETS 65536
-time_t pbs_tcp_timeout = 300;  
+time_t pbs_tcp_timeout = 300;
 
 
 
@@ -161,8 +161,6 @@ static void tcp_pack_buff(
   }  /* END tcp_pack_buff() */
 
 
-
-
 /*
  * tcp_read - read data from tcp stream to "fill" the buffer
  * Update the various buffer pointers.
@@ -173,9 +171,10 @@ static void tcp_pack_buff(
  *  -2 if EOF (stream closed)
  */
 
-int tcp_read(
+int tcp_read_base(
 
   struct tcp_chan *chan,
+  struct tcpdisbuf *tp,
   long long       *read_len,
   long long       *avail_len,
   unsigned int     timeout)
@@ -187,14 +186,11 @@ int tcp_read(
   int               tdis_buf_len = 0;
   int               max_read_len = 0;
   char             *new_data = NULL;
-  struct tcpdisbuf *tp;
+
   int               tmp_leadp = 0;
   int               tmp_trailp = 0;
   int               tmp_eod = 0;
   char              err_msg[1024];
-
-
-  tp = &chan->readbuf;
 
   /* must compact any uncommitted data into bottom of buffer */
   tcp_pack_buff(tp);
@@ -218,6 +214,10 @@ int tcp_read(
       case PBSE_TIMEOUT:
 
         chan->IsTimeout = 1;
+        if (getenv("PBSDEBUG") != NULL)
+          {
+          fprintf(stderr,"socket_read timed out after reading \"%s\" %lld bytes\n",new_data,*read_len);
+          }
 
         break;
 
@@ -293,9 +293,185 @@ int tcp_read(
   return(rc);
   }  /* END tcp_read() */
 
+#if GSSAPI
+int tcp_read_gssapi(
+
+  struct tcp_chan *chan,
+  long long       *read_len,
+  long long       *avail_len,
+  unsigned int     timeout)
+
+  {
+  OM_uint32 minor;
+  size_t l;
+  ssize_t ret;
+
+  struct tcpdisbuf *tp;
+  size_t remaining_data;
+
+leftover:
+
+  // if there is still data in the unwrapped buffer
+  if ((remaining_data = chan->unwrapped.length) > 0)
+    {
+    tp = &chan->readbuf;
+    tcp_pack_buff(tp);
+    ssize_t remaining_cap = tp->tdis_bufsize - (tp->tdis_eod - tp->tdis_thebuf);
+    if ((size_t)remaining_cap < remaining_data) // remove first f bytes from unwrapped values
+      {
+      memcpy(tp->tdis_eod, chan->unwrapped.value, remaining_cap);
+      tp->tdis_eod += remaining_cap;
+      memmove(chan->unwrapped.value, ((char *)chan->unwrapped.value)+remaining_cap, remaining_data-remaining_cap);
+      chan->unwrapped.length = remaining_data-remaining_cap;
+      *read_len = remaining_cap;	/* readbuf is now full after reading remaining_cap */
+      *avail_len = tp->tdis_eod - tp->tdis_leadp;
+      return PBSE_NONE;
+      }
+    else
+      {
+      memcpy(tp->tdis_eod, chan->unwrapped.value, remaining_data);
+      tp->tdis_eod += remaining_data;
+      gss_release_buffer(&minor, &chan->unwrapped);
+      *read_len = remaining_data;
+      *avail_len = tp->tdis_eod - tp->tdis_leadp;
+      return PBSE_NONE;	/* for simplicity */
+      }
+    }
 
 
+readmore:
+  // we don't have data in the unwrapped buffer, we need to read more
 
+  if (chan->AtEOF) // no more data
+    return(-2);
+
+  long long       gss_read_len;
+  long long       gss_avail_len;
+
+  tp = &chan->gssrdbuf;
+  ret = tcp_read_base(chan, tp, &gss_read_len, &gss_avail_len, timeout);
+
+  if (ret == PBSE_NONE && gss_avail_len >= 4) // if we read at least the size, process
+    {
+    int i;
+    for (i=0, l=0; i<4; i++)
+      l = l<<8 | (*tp->tdis_leadp++ & 0xff);
+
+    if ((size_t)(tp->tdis_eod - tp->tdis_leadp) >= l)
+      {
+      OM_uint32 major, minor;
+      gss_buffer_desc msg_in;
+      msg_in.length = l;
+      msg_in.value = tp->tdis_leadp;
+      major = gss_unwrap(&minor, chan->gssctx, &msg_in, &chan->unwrapped, NULL, NULL);
+
+      // the message is now available through chan->unwrapped, skip over the raw data
+      tp->tdis_leadp += l;
+      tp->tdis_trailp = tp->tdis_leadp;	/* commit */
+
+      if (major != GSS_S_COMPLETE)
+        {
+        if (getenv("PBSDEBUG") != NULL)
+          pbsgss_display_status("gss_unwrap", major, minor);
+
+        gss_release_buffer(&minor, &chan->unwrapped);
+        chan->ReadErrno = 0;
+        return(-1);
+        }
+      if (chan->unwrapped.length > 0)
+        goto leftover;
+      }
+    else
+      {
+      tp->tdis_leadp = tp->tdis_trailp;	/* uncommit */
+      if (!chan->IsTimeout)
+        goto readmore;
+      }
+    }
+
+  return ret;
+  }
+#endif
+
+int tcp_read(
+
+  struct tcp_chan *chan,
+  long long       *read_len,
+  long long       *avail_len,
+  unsigned int     timeout)
+
+  {
+#if GSSAPI
+  if (chan->gssctx == GSS_C_NO_CONTEXT)
+    {
+    int ret = tcp_read_base(chan, &chan->readbuf, read_len, avail_len, timeout);
+    if (getenv("PBSDEBUG") != NULL)
+      {
+      fprintf(stderr,"Reading a TCP socket (%d) - no GSSAPI.\n",chan->sock);
+      fprintf(stderr,"Read: \"%s\" Len: %lld\n",chan->readbuf.tdis_leadp,*read_len);
+      if (chan->IsTimeout)
+        {
+        fprintf(stderr,"PROTOCOL TIMEOUT\n");
+        }
+      }
+
+    return ret;
+    }
+  else
+    {
+    int ret = tcp_read_gssapi(chan, read_len, avail_len, timeout);
+    if (getenv("PBSDEBUG") != NULL)
+      {
+      fprintf(stderr,"Reading a TCP socket (%d) - with GSSAPI.\n",chan->sock);
+      fprintf(stderr,"Read: \"%s\" Len: %lld\n",chan->readbuf.tdis_leadp,*read_len);
+      }
+    return ret;
+    }
+#else
+  return tcp_read_base(chan, &chan->readbuf, read_len, avail_len, timeout);
+#endif
+  }
+
+
+ssize_t write_socket_loop(
+
+  int         fd,    /* I */
+  const void *buf,   /* I */
+  ssize_t     count) /* I */
+
+  {
+  char             *pbs_debug = getenv("PBSDEBUG");
+  int ret = 0;
+  ssize_t ct = count;
+  const char *dat = (char*)buf;
+
+  while ((ret = write_ac_socket(fd, dat, ct)) != (ssize_t)ct)
+    {
+    if (ret == -1)
+      {
+      if (errno == EINTR)
+        continue;
+
+      /* FAILURE */
+
+      if (pbs_debug != NULL)
+        {
+        fprintf(stderr,
+          "TCP write of %d bytes (%.32s) [sock=%d] failed, errno=%d (%s)\n",
+          (int)ct, dat, fd, errno, strerror(errno));
+        }
+
+      return(-1);
+      }  /* END if (i == -1) */
+    else
+      {
+      ct -= ret;
+      dat += ret;
+      }
+    }  /* END while (i) */
+
+  return 0;
+  }
 
 /*
  * DIS_tcp_wflush - flush tcp/dis write buffer
@@ -313,40 +489,72 @@ int DIS_tcp_wflush(
 
   {
   int               i;
-  char             *pbs_debug = NULL;
-
   struct tcpdisbuf *tp = &chan->writebuf;
   char             *pb = tp->tdis_thebuf;
   size_t            ct = tp->tdis_trailp - tp->tdis_thebuf;
 
-  pbs_debug = getenv("PBSDEBUG");
+  if (getenv("PBSDEBUG") != NULL)
+    fprintf(stderr,"Flushing connection on socket %d\n",chan->sock);
 
-  while ((i = write_ac_socket(chan->sock, pb, ct)) != (ssize_t)ct)
+#ifdef GSSAPI
+  OM_uint32 major, minor;
+  gss_buffer_desc msg_in, msg_out;
+  int conf_state;
+  unsigned char nct[4];
+
+  msg_out.value = NULL;
+  msg_out.length = 0;
+  if (chan->gssctx != GSS_C_NO_CONTEXT)
     {
-    if (i == -1)
-      {
-      if (errno == EINTR)
-        {
-        continue;
-        }
+    if (getenv("PBSDEBUG") != NULL)
+      fprintf(stderr,"This connection is GSSAPI enabled, decoding first.\n");
 
-      /* FAILURE */
+    msg_in.value  = pb;
+    msg_in.length = ct;
 
-      if (pbs_debug != NULL)
-        {
-        fprintf(stderr,
-          "TCP write of %d bytes (%.32s) [sock=%d] failed, errno=%d (%s)\n",
-          (int)ct, pb, chan->sock, errno, strerror(errno));
-        }
-      
-      return(-1);
-      }  /* END if (i == -1) */
-    else
+    major = gss_wrap(&minor, chan->gssctx, chan->Confidential, GSS_C_QOP_DEFAULT, &msg_in, &conf_state, &msg_out);
+    if (major != GSS_S_COMPLETE)
       {
-      ct -= i;
-      pb += i;
+      if (getenv("PBSDEBUG") != NULL)
+        pbsgss_display_status("gss_wrap", major, minor);
+
+      gss_release_buffer(&minor, &msg_out);
+      return PBSE_GSSENCODE;
       }
-    }  /* END while (i) */
+
+    if (chan->Confidential && !conf_state)
+      {
+      if (getenv("PBSDEBUG") != NULL)
+        fprintf(stderr, "gss_wrap() failed to encrypt as requested\n");
+
+      gss_release_buffer(&minor, &msg_out);
+      return PBSE_GSSENCODE;
+      }
+
+    pb = static_cast<char*>(msg_out.value);
+    ct = msg_out.length;
+    for (i=sizeof(nct); i>0; ct>>=8)
+      nct[--i] = ct & 0xff;
+
+    i = write_socket_loop(chan->sock, (char*)nct, sizeof(nct));
+
+    if (i >= 0)
+      i = write_socket_loop(chan->sock, msg_out.value, msg_out.length);
+
+    gss_release_buffer(&minor, &msg_out);
+
+    tp->tdis_eod = tp->tdis_leadp;
+    tcp_pack_buff(tp);
+
+    if (i < 0)
+      return -1;
+
+    return 0;
+    }
+#endif
+
+  if ((i = write_socket_loop(chan->sock,pb,ct)) < 0)
+    return i;
 
   /* SUCCESS */
 
@@ -503,7 +711,7 @@ int tcp_puts(
   struct tcpdisbuf *tp = NULL;
   char             *temp = NULL;
   int               leadpct;
-  int               trailpct; 
+  int               trailpct;
   size_t            newbufsize;
   char              log_buf[LOCAL_LOG_BUF_SIZE];
 
@@ -652,7 +860,7 @@ int tcp_chan_has_data(
  * DIS_tcp_setup - setup supports routines for dis, "data is strings", to
  * use tcp stream I/O.  Also initializes an array of pointers to
  * buffers and a buffer to be used for the given fd.
- * 
+ *
  * NOTE:  tmpArray is global
  *
  * NOTE:  does not return FAILURE - FIXME
@@ -706,13 +914,34 @@ struct tcp_chan * DIS_tcp_setup(
   tp->tdis_bufsize = THE_BUF_SIZE;
   DIS_tcp_clear(tp);
 
+#ifdef GSSAPI
+  chan->unwrapped.length = 0;
+  chan->unwrapped.value = NULL;
+  chan->gssctx = GSS_C_NO_CONTEXT;
+
+  tp = &chan->gssrdbuf;
+
+  tp->tdis_thebuf = (char *)calloc(1,THE_BUF_SIZE+1);
+  if(tp->tdis_thebuf == NULL)
+    {
+    free(chan->readbuf.tdis_thebuf);
+    free(chan->writebuf.tdis_thebuf);
+    free(chan);
+    log_err(errno,"DIS_tcp_setup","calloc failure");
+    return(NULL);
+    }
+
+  tp->tdis_bufsize = THE_BUF_SIZE;
+  DIS_tcp_clear(tp);
+#endif
+
   return(chan);
   }  /* END DIS_tcp_setup() */
 
 
 
 void DIS_tcp_cleanup(
-    
+
   struct tcp_chan *chan)
 
   {
@@ -726,11 +955,32 @@ void DIS_tcp_cleanup(
   tp = &chan->writebuf;
   free(tp->tdis_thebuf);
 
+#ifdef GSSAPI
+  OM_uint32 minor;
+
+  if (chan->gssctx != GSS_C_NO_CONTEXT)
+    {
+	  OM_uint32 minor,major;
+
+	  major=gss_delete_sec_context (&minor, &chan->gssctx,GSS_C_NO_BUFFER);
+    if(major != GSS_S_COMPLETE )
+    	log_err(major,"DIS_tcp_release","gss_delete_sec_context failure");
+
+    chan->gssctx = GSS_C_NO_CONTEXT;
+    }
+
+  if (chan->unwrapped.value)
+    gss_release_buffer (&minor, &chan->unwrapped);
+
+  tp = &chan->gssrdbuf;
+  free(tp->tdis_thebuf);
+#endif
+
   free(chan);
   }
 
 void DIS_tcp_close(
-    
+
   struct tcp_chan *chan)
 
   {
@@ -739,5 +989,64 @@ void DIS_tcp_close(
   if (sock != -1)
     close(sock);
   }
+
+#ifdef GSSAPI
+/** \brief Associate GSSAPI information with a TCP channel
+ *
+ * \param fd TCP channel descriptor
+ * \param ctx Kerberos security context
+ * \param flags
+ * \returns \c PBSGSS_OK on SUCCESS, \c PBSGSS_ERR_INTERNAL when memory couldn't be allocated
+ */
+int DIS_tcp_set_gss(struct tcp_chan *chan, gss_ctx_id_t ctx, OM_uint32 flags)
+  {
+  OM_uint32 major, minor, bufsize;
+
+  assert (chan->gssctx == GSS_C_NO_CONTEXT);
+
+  chan->gssctx = ctx;
+  chan->AtEOF = 0;
+  chan->Confidential = (flags & GSS_C_CONF_FLAG);
+
+  if (getenv("PBSDEBUG") != NULL)
+    {
+    fprintf(stderr,"Set GSSAPI security context \"%p\" for socket: %d\n",chan->gssctx,chan->sock);
+    }
+
+  major = gss_wrap_size_limit (&minor, ctx, (flags & GSS_C_CONF_FLAG), GSS_C_QOP_DEFAULT, THE_BUF_SIZE, &bufsize);
+
+  /* reallocate the gss buffer if it's too small to handle the wrapped
+     version of the largest unwrapped message
+  */
+  if (major == GSS_S_COMPLETE)
+    {
+
+    struct tcpdisbuf *tp = &chan->gssrdbuf;
+    if (tp->tdis_bufsize < bufsize)
+      {
+      if (tp->tdis_thebuf != NULL)
+        {
+        free(tp->tdis_thebuf);
+        }
+
+      tp->tdis_thebuf = (char *)calloc(1,bufsize+1);
+      if(tp->tdis_thebuf == NULL)
+        {
+        log_err(errno,"DIS_tcp_set_gss","malloc failure");
+        return PBSGSS_ERR_INTERNAL;
+        }
+
+      tp->tdis_bufsize = bufsize;
+      }
+
+    return PBSGSS_OK;
+    }
+  else
+    {
+    pbsgss_display_status("Kerberos - DIS_tcp_set_gss", major, minor);
+    return PBSGSS_ERR_WRAPSIZE;
+    }
+  } /* END DIS_tcp_set_gss */
+#endif
 
 /* END tcp_dis.c */
